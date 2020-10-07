@@ -1,4 +1,4 @@
-# SO Project 2020-21
+# SO Project 2020-2021
 
 ## Todo
 ### Exercício 1
