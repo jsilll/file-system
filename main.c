@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #define MAX_COMMANDS 150000
 #define MAX_INPUT_SIZE 100
@@ -124,13 +125,14 @@ void applyCommands() {
 
 /* Usage: ./tecnicofs intputfile outputfile synchstrategy */
 int main(int argc, char *argv[]) {
+	clock_t begin = clock();
 	/* Basic Params Validation */
 	if (argc != 4) {
 		exit(EXIT_FAILURE);
 	}
+	/* Re-assign STD I/O  */
 	freopen(argv[1], "r", stdin);
 	freopen(argv[2], "w", stdout);
-	printf("TecnicoFS initialized in %s mode\n", argv[3]);
 	/* init filesystem */
 	init_fs();
 	/* process input and print tree */
@@ -139,5 +141,6 @@ int main(int argc, char *argv[]) {
 	print_tecnicofs_tree(stdout);
 	/* release allocated memory */
 	destroy_fs();
+	printf("TecnicoFS completed in %1.4lf seconds.\n", (double) (clock() - begin) / CLOCKS_PER_SEC);
 	exit(EXIT_SUCCESS);
 }
