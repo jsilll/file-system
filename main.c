@@ -41,6 +41,21 @@ void validateInitArgs(int argc, char *argv[])
 	}
 }
 
+void redirectIO(char *input_file, char *output_file)
+{
+	/* Vou perguntar ao stor das teoricas se podemos fazer isto */
+	if (!freopen(input_file, "r", stdin))
+	{
+		fprintf(stderr, "Error opening input file.\n");
+		exit(EXIT_FAILURE);
+	}
+	else if (!freopen(output_file, "w", stdout))
+	{
+		fprintf(stderr, "Error opening output file.\n");
+		exit(EXIT_FAILURE);
+	}
+}
+
 int insertCommand(char *data)
 {
 	if (numberCommands != MAX_COMMANDS)
@@ -171,21 +186,8 @@ int main(int argc, char *argv[])
 {
 	struct timeval begin, end;
 	gettimeofday(&begin, 0);
-
 	validateInitArgs(argc, argv);
-	/* Re-assign STD I/O  */
-	/* Vou perguntar ao stor das teoricas se podemos fazer isto */
-	if (!freopen(argv[1], "r", stdin))
-	{
-		fprintf(stderr, "Error opening input file.\n");
-		exit(EXIT_FAILURE);
-	}
-	else if (!freopen(argv[2], "w", stdout))
-	{
-		fprintf(stderr, "Error opening output file.\n");
-		exit(EXIT_FAILURE);
-	}
-
+	redirectIO(argv[1], argv[2]);
 	/* init filesystem */
 	init_fs();
 	/* process input and print tree */
@@ -194,12 +196,10 @@ int main(int argc, char *argv[])
 	print_tecnicofs_tree(stdout);
 	/* release allocated memory */
 	destroy_fs();
-
 	gettimeofday(&end, 0);
 	long seconds = end.tv_sec - begin.tv_sec;
 	long microseconds = end.tv_usec - begin.tv_usec;
 	double elapsed = seconds + microseconds * 1e-6;
 	printf("TecnicoFS completed in %.4f seconds.\n", elapsed);
-
 	exit(EXIT_SUCCESS);
 }
