@@ -175,8 +175,17 @@ int main(int argc, char *argv[])
 	validateInitArgs(argc, argv);
 	/* Re-assign STD I/O  */
 	/* Vou perguntar ao stor das teoricas se podemos fazer isto */
-	freopen(argv[1], "r", stdin);
-	freopen(argv[2], "w", stdout);
+	if (!freopen(argv[1], "r", stdin))
+	{
+		fprintf(stderr, "Error opening input file.\n");
+		exit(EXIT_FAILURE);
+	}
+	else if (!freopen(argv[2], "w", stdout))
+	{
+		fprintf(stderr, "Error opening output file.\n");
+		exit(EXIT_FAILURE);
+	}
+
 	/* init filesystem */
 	init_fs();
 	/* process input and print tree */
@@ -185,8 +194,8 @@ int main(int argc, char *argv[])
 	print_tecnicofs_tree(stdout);
 	/* release allocated memory */
 	destroy_fs();
-	gettimeofday(&end, 0);
 
+	gettimeofday(&end, 0);
 	long seconds = end.tv_sec - begin.tv_sec;
 	long microseconds = end.tv_usec - begin.tv_usec;
 	double elapsed = seconds + microseconds * 1e-6;
