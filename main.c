@@ -14,6 +14,19 @@ char inputCommands[MAX_COMMANDS][MAX_INPUT_SIZE];
 int numberCommands = 0;
 int headQueue = 0;
 
+void validateInitArgs(int argc, char *argv[]) {
+	/* Usage: ./tecnicofs inputfile outputfile numthreads synchstrategy */
+	if (argc != 5) {
+		fprintf(stderr, "Quantidade invalida de parametros.\n");
+		exit(EXIT_FAILURE);
+	}
+	else if ( atoi(argv[3])<=0 ) {
+		fprintf(stderr, "Numero de threads invalido.\n");
+		exit(EXIT_FAILURE);
+	}
+	/* Synchstrategy */
+}
+
 int insertCommand(char *data) {
 	if (numberCommands != MAX_COMMANDS) {
 		strcpy(inputCommands[numberCommands++], data);
@@ -126,13 +139,12 @@ void applyCommands() {
 /* Usage: ./tecnicofs intputfile outputfile synchstrategy */
 int main(int argc, char *argv[]) {
 	clock_t begin = clock();
-	/* Basic Params Validation */
-	if (argc != 4) {
-		exit(EXIT_FAILURE);
-	}
+	validateInitArgs(argc, argv);
+	
 	/* Re-assign STD I/O  */
-	freopen(argv[1], "r", stdin);
-	freopen(argv[2], "w", stdout);
+	/* freopen(argv[1], "r", stdin);
+	freopen(argv[2], "w", stdout); */
+
 	/* init filesystem */
 	init_fs();
 	/* process input and print tree */
@@ -141,6 +153,8 @@ int main(int argc, char *argv[]) {
 	print_tecnicofs_tree(stdout);
 	/* release allocated memory */
 	destroy_fs();
+
 	printf("TecnicoFS completed in %1.4lf seconds.\n", (double) (clock() - begin) / CLOCKS_PER_SEC);
+	
 	exit(EXIT_SUCCESS);
 }
