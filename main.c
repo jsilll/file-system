@@ -78,6 +78,16 @@ FILE *fopenSafe(char *file_name, const char *mode)
 	return fp;
 }
 
+int fcloseSafe(FILE *file)
+{
+	if (fclose(file) == EOF)
+	{
+		fprintf(stderr, "Error closing a file.\n");
+		/* doesn't exist */
+	}
+	return 0;
+}
+
 int insertCommand(char *data)
 {
 	if (numberCommands != MAX_COMMANDS)
@@ -224,7 +234,7 @@ int main(int argc, char *argv[])
 	/* process input and print tree */
 	file_buffer = fopenSafe(argv[1], "r");
 	processInput(file_buffer);
-	fclose(file_buffer);
+	fcloseSafe(file_buffer);
 	file_buffer = fopenSafe(argv[2], "w");
 	applyCommands(file_buffer);
 	print_tecnicofs_tree(file_buffer);
@@ -233,6 +243,6 @@ int main(int argc, char *argv[])
 	/* get final and perform difference calculations */
 	gettimeofday(&end, 0);
 	fprintf(file_buffer, "TecnicoFS completed in %.4f seconds.\n", getTimeDiff(&begin, &end));
-	fclose(file_buffer);
+	fcloseSafe(file_buffer);
 	exit(EXIT_SUCCESS);
 }
