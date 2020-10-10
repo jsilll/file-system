@@ -41,9 +41,9 @@ void validateInitArgs(int argc, char *argv[])
 	}
 }
 
+/* Redirect Clean Version (not being used) */
 void redirectIO(char *input_file, char *output_file)
 {
-	/* Vou perguntar ao stor das teoricas se podemos fazer isto */
 	if (!freopen(input_file, "r", stdin))
 	{
 		fprintf(stderr, "Error opening input file.\n");
@@ -54,6 +54,28 @@ void redirectIO(char *input_file, char *output_file)
 		fprintf(stderr, "Error opening output file.\n");
 		exit(EXIT_FAILURE);
 	}
+}
+
+FILE *fopenSafe(char *file_name, const char *mode)
+{
+	FILE *fp = fopen(file_name, mode);
+	if (!fp)
+	{
+		switch (mode[0])
+		{
+		case 'r':
+			fprintf(stderr, "Error opening input file: %s.\n", file_name);
+			break;
+		case 'w':
+			fprintf(stderr, "Error opening output file: %s.\n", file_name);
+			break;
+		default:
+			fprintf(stderr, "Error opening a file: %s\n", file_name);
+			break;
+		}
+		exit(EXIT_FAILURE);
+	}
+	return fp;
 }
 
 int insertCommand(char *data)
@@ -82,12 +104,12 @@ void errorParse()
 	exit(EXIT_FAILURE);
 }
 
-void processInput()
+void processInput(FILE *commands_file)
 {
 	char line[MAX_INPUT_SIZE];
 	int n = sizeof(line) / sizeof(char);
 	/* break loop with ^Z or ^D */
-	while (fgets(line, n, stdin))
+	while (fgets(line, n, commands_file))
 	{
 		char token, type;
 		char name[MAX_INPUT_SIZE];
@@ -125,7 +147,7 @@ void processInput()
 	}
 }
 
-void applyCommands()
+void applyCommands(FILE *output_file)
 {
 	while (numberCommands > 0)
 	{
@@ -149,11 +171,11 @@ void applyCommands()
 			switch (type)
 			{
 			case 'f':
-				printf("Create file: %s\n", name);
+				fprintf(output_file, "Create file: %s\n", name);
 				create(name, T_FILE);
 				break;
 			case 'd':
-				printf("Create directory: %s\n", name);
+				fprintf(output_file, "Create directory: %s\n", name);
 				create(name, T_DIRECTORY);
 				break;
 			default:
@@ -164,12 +186,12 @@ void applyCommands()
 		case 'l':
 			searchResult = lookup(name);
 			if (searchResult >= 0)
-				printf("Search: %s found\n", name);
+				fprintf(output_file, "Search: %s found\n", name);
 			else
-				printf("Search: %s not found\n", name);
+				fprintf(output_file, "Search: %s not found\n", name);
 			break;
 		case 'd':
-			printf("Delete: %s\n", name);
+			fprintf(output_file, "Delete: %s\n", name);
 			delete (name);
 			break;
 		default:
@@ -181,25 +203,36 @@ void applyCommands()
 	}
 }
 
+double getTimeDiff(struct timeval *begin, struct timeval *end)
+{
+	long seconds = end->tv_sec - begin->tv_sec;
+	long microseconds = end->tv_usec - begin->tv_usec;
+	double elapsed = seconds + microseconds * 1e-6;
+	return elapsed;
+}
+
 /* Usage: ./tecnicofs intputfile outputfile synchstrategy */
 int main(int argc, char *argv[])
 {
 	struct timeval begin, end;
+	FILE *file_buffer;
 	gettimeofday(&begin, 0);
+	/* Pre-validating input arguments */
 	validateInitArgs(argc, argv);
-	redirectIO(argv[1], argv[2]);
 	/* init filesystem */
 	init_fs();
 	/* process input and print tree */
-	processInput();
-	applyCommands();
-	print_tecnicofs_tree(stdout);
+	file_buffer = fopenSafe(argv[1], "r");
+	processInput(file_buffer);
+	fclose(file_buffer);
+	file_buffer = fopenSafe(argv[2], "w");
+	applyCommands(file_buffer);
+	print_tecnicofs_tree(file_buffer);
 	/* release allocated memory */
 	destroy_fs();
+	/* get final and perform difference calculations */
 	gettimeofday(&end, 0);
-	long seconds = end.tv_sec - begin.tv_sec;
-	long microseconds = end.tv_usec - begin.tv_usec;
-	double elapsed = seconds + microseconds * 1e-6;
-	printf("TecnicoFS completed in %.4f seconds.\n", elapsed);
+	fprintf(file_buffer, "TecnicoFS completed in %.4f seconds.\n", getTimeDiff(&begin, &end));
+	fclose(file_buffer);
 	exit(EXIT_SUCCESS);
 }
