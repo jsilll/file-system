@@ -6,6 +6,7 @@
 #include <string.h>
 #include <sys/time.h>
 #include <unistd.h>
+#include <pthread.h>
 
 #define MAX_COMMANDS 150000
 #define MAX_INPUT_SIZE 100
@@ -41,21 +42,6 @@ void validateInitArgs(int argc, char *argv[])
 	}
 }
 
-/* Redirect Clean Version (not being used) */
-void redirectIO(char *input_file, char *output_file)
-{
-	if (!freopen(input_file, "r", stdin))
-	{
-		fprintf(stderr, "Error opening input file.\n");
-		exit(EXIT_FAILURE);
-	}
-	else if (!freopen(output_file, "w", stdout))
-	{
-		fprintf(stderr, "Error opening output file.\n");
-		exit(EXIT_FAILURE);
-	}
-}
-
 FILE *fopenSafe(char *file_name, const char *mode)
 {
 	FILE *fp = fopen(file_name, mode);
@@ -83,7 +69,6 @@ int fcloseSafe(FILE *file)
 	if (fclose(file) == EOF)
 	{
 		fprintf(stderr, "Error closing a file.\n");
-		/* doesn't exist */
 	}
 	return 0;
 }
@@ -98,6 +83,7 @@ int insertCommand(char *data)
 	return 0;
 }
 
+// Critical Zone
 char *removeCommand()
 {
 	if (numberCommands > 0)
@@ -119,6 +105,7 @@ void processInput(FILE *commands_file)
 	char line[MAX_INPUT_SIZE];
 	int n = sizeof(line) / sizeof(char);
 	/* break loop with ^Z or ^D */
+
 	while (fgets(line, n, commands_file))
 	{
 		char token, type;
@@ -157,59 +144,103 @@ void processInput(FILE *commands_file)
 	}
 }
 
-void applyCommands(FILE *output_file)
+void applyCommand(const char *command)
+{
+	char token, type;
+	char name[MAX_INPUT_SIZE];
+	int numTokens = sscanf(command, "%c %s %c", &token, name, &type);
+	if (numTokens < 2)
+	{
+		fprintf(stderr, "Error: invalid command in Queue\n");
+		exit(EXIT_FAILURE);
+	}
+	int searchResult;
+	switch (token)
+	{
+	case 'c':
+		switch (type)
+		{
+		case 'f':
+			printf("Create file: %s\n", name);
+			create(name, T_FILE);
+			break;
+		case 'd':
+			printf("Create directory: %s\n", name);
+			create(name, T_DIRECTORY);
+			break;
+		default:
+			fprintf(stderr, "Error: invalid node type\n");
+			exit(EXIT_FAILURE);
+		}
+		break;
+	case 'l':
+		searchResult = lookup(name);
+		if (searchResult >= 0)
+			printf("Search: %s found\n", name);
+		else
+			printf("Search: %s not found\n", name);
+		break;
+	case 'd':
+		printf("Delete: %s\n", name);
+		delete (name);
+		break;
+	default:
+	{
+		fprintf(stderr, "Error: command to apply\n");
+		exit(EXIT_FAILURE);
+	}
+	}
+}
+
+void *queueWorker(char *syncstrat)
 {
 	while (numberCommands > 0)
 	{
 		const char *command = removeCommand();
-		if (command == NULL)
-		{
-			continue;
-		}
-		char token, type;
-		char name[MAX_INPUT_SIZE];
-		int numTokens = sscanf(command, "%c %s %c", &token, name, &type);
-		if (numTokens < 2)
-		{
-			fprintf(stderr, "Error: invalid command in Queue\n");
-			exit(EXIT_FAILURE);
-		}
-		int searchResult;
-		switch (token)
-		{
-		case 'c':
-			switch (type)
-			{
-			case 'f':
-				fprintf(output_file, "Create file: %s\n", name);
-				create(name, T_FILE);
-				break;
-			case 'd':
-				fprintf(output_file, "Create directory: %s\n", name);
-				create(name, T_DIRECTORY);
-				break;
-			default:
-				fprintf(stderr, "Error: invalid node type\n");
-				exit(EXIT_FAILURE);
-			}
-			break;
-		case 'l':
-			searchResult = lookup(name);
-			if (searchResult >= 0)
-				fprintf(output_file, "Search: %s found\n", name);
-			else
-				fprintf(output_file, "Search: %s not found\n", name);
-			break;
-		case 'd':
-			fprintf(output_file, "Delete: %s\n", name);
-			delete (name);
-			break;
-		default:
-		{ /* error */
-			fprintf(stderr, "Error: command to apply\n");
-			exit(EXIT_FAILURE);
-		}
-		}
+		applyCommand(command);
+	}
+	// switch (syncstrat[0])
+	// {
+	// // mutex
+	// case 'm':
+
+	// 	break;
+
+	// rwlock
+	// case 'r':
+
+	// 	break;
+
+	// nosync
+	// case 'n':
+
+	// 	break;
+
+	// default:
+	// 	break;
+	// }
+
+	return NULL;
+}
+
+void generateThreads(char *threads_count_char, char *syncstrat)
+{
+	int i, *result;
+	int threads_count = atoi(threads_count_char);
+	pthread_t tid[threads_count];
+	/* pthread_t *tid = (pthread_t *)malloc(sizeof(pthread_t) * threads_count); */
+	for (i = 0; i < threads_count; i++)
+	{
+		if (pthread_create(&tid[i], NULL, queueWorker, syncstrat) != 0) /* WIP Synchcoiso */
+			fprintf(stderr, "Failed to create thread number %d.\n", i);
+		printf("Thread number %d has been successfully created.\n", i);
+	}
+	for (i = 0; i < threads_count; i++)
+	{
+		// WIP (perceber o mambo do &result)
+		if (pthread_join(tid[i], (void **)&result) != 0)
+			printf("Error while joining thread.\n");
+		printf("Thread has finished %d\n", i);
 	}
 }
 
@@ -221,7 +252,7 @@ double getTimeDiff(struct timeval *begin, struct timeval *end)
 	return elapsed;
 }
 
-/* Usage: ./tecnicofs intputfile outputfile synchstrategy */
+/* Usage: ./tecnicofs intputfile outputfile nthreads synchstrategy */
 int main(int argc, char *argv[])
 {
 	struct timeval begin, end;
@@ -235,14 +266,15 @@ int main(int argc, char *argv[])
 	file_buffer = fopenSafe(argv[1], "r");
 	processInput(file_buffer);
 	fcloseSafe(file_buffer);
-	file_buffer = fopenSafe(argv[2], "w");
-	applyCommands(file_buffer);
-	print_tecnicofs_tree(file_buffer);
+	stdout = fopenSafe(argv[2], "w");
+	/* generating threads */
+	generateThreads(argv[3], argv[4]);
+	print_tecnicofs_tree(stdout);
 	/* release allocated memory */
 	destroy_fs();
-	/* get final and perform difference calculations */
+	/* get final time and perform difference calculations */
 	gettimeofday(&end, 0);
 	fprintf(file_buffer, "TecnicoFS completed in %.4f seconds.\n", getTimeDiff(&begin, &end));
-	fcloseSafe(file_buffer);
+	fcloseSafe(stdout);
 	exit(EXIT_SUCCESS);
 }
