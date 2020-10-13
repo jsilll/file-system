@@ -240,7 +240,7 @@ int main(int argc, char *argv[])
 	print_tecnicofs_tree(file_buffer);
 	destroy_fs();
 	gettimeofday(&end, 0);
-	fprintf(file_buffer, "TecnicoFS completed in %.4f seconds.\n", timeDiff(&begin, &end));
+	printf("TecnicoFS completed in %.4f seconds.\n", timeDiff(&begin, &end));
 	fcloseSafe(file_buffer);
 	exit(EXIT_SUCCESS);
 }

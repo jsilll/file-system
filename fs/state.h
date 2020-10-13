@@ -15,12 +15,13 @@
 #define SUCCESS 0
 #define FAIL -1
 
-#define DELAY 5000
+#define DELAY 500000
 
 /*
  * Contains the name of the entry and respective i-number
  */
-typedef struct dirEntry {
+typedef struct dirEntry
+{
 	char name[MAX_FILE_NAME];
 	int inumber;
 } DirEntry;
@@ -28,15 +29,17 @@ typedef struct dirEntry {
 /*
  * Data is either text (file) or entries (DirEntry)
  */
-union Data {
-	char *fileContents;      /* for files */
+union Data
+{
+	char *fileContents;	  /* for files */
 	DirEntry *dirEntries; /* for directories */
 };
 
 /*
  * I-node definition
  */
-typedef struct inode_t {
+typedef struct inode_t
+{
 	type nodeType;
 	union Data data;
 	/* more i-node attributes will be added in future exercises */
