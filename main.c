@@ -200,7 +200,7 @@ void *queueWorker(void *syncstrat)
 	return NULL;
 }
 
-void generateThreads(char *threads_count_char, char *syncstrat)
+void executeThreads(char *threads_count_char, char *syncstrat)
 {
 	int i, *result;
 	int threads_count = atoi(threads_count_char);
@@ -236,11 +236,11 @@ int main(int argc, char *argv[])
 	processInput(file_buffer);
 	fcloseSafe(file_buffer);
 	file_buffer = fopenSafe(argv[2], "w");
-	generateThreads(argv[3], argv[4]);
+	executeThreads(argv[3], argv[4]);
 	print_tecnicofs_tree(file_buffer);
+	fcloseSafe(file_buffer);
 	destroy_fs();
 	gettimeofday(&end, 0);
 	printf("TecnicoFS completed in %.4f seconds.\n", timeDiff(&begin, &end));
-	fcloseSafe(file_buffer);
 	exit(EXIT_SUCCESS);
 }
