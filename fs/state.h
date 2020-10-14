@@ -15,7 +15,7 @@
 #define SUCCESS 0
 #define FAIL -1
 
-#define DELAY 500000
+#define DELAY 5000
 
 /*
  * Contains the name of the entry and respective i-number
@@ -45,23 +45,27 @@ typedef struct inode_t
 	/* more i-node attributes will be added in future exercises */
 } inode_t;
 
+void fsLock(char *syncstrat, char type);
+
+void fsUnlock(char *syncstrat);
+
 void insert_delay(int cycles);
 
 void inode_table_init();
 
 void inode_table_destroy();
 
-int inode_create(type nType);
+int inode_create(type nType, char *syncstrat);
 
-int inode_delete(int inumber);
+int inode_delete(int inumber, char *syncstrat);
 
-int inode_get(int inumber, type *nType, union Data *data);
+int inode_get(int inumber, type *nType, union Data *data, char *syncstrat);
 
 int inode_set_file(int inumber, char *fileContents, int len);
 
-int dir_reset_entry(int inumber, int sub_inumber);
+int dir_reset_entry(int inumber, int sub_inumber, char *syncstrat);
 
-int dir_add_entry(int inumber, int sub_inumber, char *sub_name);
+int dir_add_entry(int inumber, int sub_inumber, char *sub_name, char *syncstrat);
 
 void inode_print_tree(FILE *fp, int inumber, char *name);
 

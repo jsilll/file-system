@@ -8,7 +8,9 @@
 #include <pthread.h>
 
 inode_t inode_table[INODE_TABLE_SIZE];
-pthread_mutex_t fsMutex = PTHREAD_MUTEX_INITIALIZER;
+
+pthread_mutex_t fsMutex;
+pthread_rwlock_t fsRWLock;
 
 /*
  * Sleeps for synchronization testing.
@@ -21,10 +23,65 @@ void insert_delay(int cycles)
 }
 
 /*
+ * Function for responsible for locking the fs structure, supports
+ * mutex, rwlock and nosync
+ */
+void fsLock(char *syncstrat, char type)
+{
+	switch (syncstrat[0])
+	{
+	case 'm': /* mutex */
+		pthread_mutex_lock(&fsMutex);
+		break;
+	case 'r': /* rwlock */
+		switch (type)
+		{
+		case 'r':
+			pthread_rwlock_rdlock(&fsRWLock);
+			break;
+		case 'w':
+			break;
+			pthread_rwlock_wrlock(&fsRWLock);
+		default:
+			break;
+		}
+		break;
+	case 'n':
+		break;
+	default:
+		break;
+	}
+}
+
+/*
+ * Function for responsible for unlocking the fs structure, supports
+ * mutex, rwlock and nosync
+ */
+void fsUnlock(char *syncstrat)
+{
+	switch (syncstrat[0])
+	{
+	case 'm':
+		pthread_mutex_unlock(&fsMutex);
+		break;
+	case 'r':
+		pthread_rwlock_unlock(&fsRWLock);
+		break;
+	case 'n':
+		break;
+	default:
+		break;
+	}
+}
+
+/*
  * Initializes the i-nodes table.
  */
 void inode_table_init()
 {
+	pthread_mutex_init(&fsMutex, NULL);
+	pthread_rwlock_init(&fsRWLock, NULL);
+
 	for (int i = 0; i < INODE_TABLE_SIZE; i++)
 	{
 		inode_table[i].nodeType = T_NONE;
@@ -58,13 +115,13 @@ void inode_table_destroy()
  *  inumber: identifier of the new i-node, if successfully created
  *     FAIL: if an error occurs
  */
-int inode_create(type nType)
+int inode_create(type nType, char *syncstrat)
 {
 	/* Used for testing synchronization speedup */
 	insert_delay(DELAY);
 
 	/*Critical Zone Beggining*/
-	pthread_mutex_lock(&fsMutex);
+	fsLock(syncstrat, 'w');
 	for (int inumber = 0; inumber < INODE_TABLE_SIZE; inumber++)
 	{
 		if (inode_table[inumber].nodeType == T_NONE)
@@ -85,11 +142,11 @@ int inode_create(type nType)
 			{
 				inode_table[inumber].data.fileContents = NULL;
 			}
-			pthread_mutex_unlock(&fsMutex);
+			fsUnlock(syncstrat);
 			return inumber;
 		}
 	}
-	pthread_mutex_unlock(&fsMutex);
+	fsUnlock(syncstrat);
 	return FAIL;
 }
 
@@ -99,16 +156,16 @@ int inode_create(type nType)
  *  - inumber: identifier of the i-node
  * Returns: SUCCESS or FAIL
  */
-int inode_delete(int inumber)
+int inode_delete(int inumber, char *syncstrat)
 {
 	/* Used for testing synchronization speedup */
 	insert_delay(DELAY);
 
 	/*Critical Zone Beggining*/
-	pthread_mutex_lock(&fsMutex);
+	fsLock(syncstrat, 'w');
 	if ((inumber < 0) || (inumber > INODE_TABLE_SIZE) || (inode_table[inumber].nodeType == T_NONE))
 	{
-		pthread_mutex_unlock(&fsMutex);
+		fsUnlock(syncstrat);
 		printf("inode_delete: invalid inumber\n");
 		return FAIL;
 	}
@@ -117,7 +174,7 @@ int inode_delete(int inumber)
 	/* see inode_table_destroy function */
 	if (inode_table[inumber].data.dirEntries)
 		free(inode_table[inumber].data.dirEntries);
-	pthread_mutex_unlock(&fsMutex);
+	fsUnlock(syncstrat);
 	return SUCCESS;
 }
 
@@ -130,17 +187,17 @@ int inode_delete(int inumber)
  *  - data: pointer to data
  * Returns: SUCCESS or FAIL
  */
-int inode_get(int inumber, type *nType, union Data *data)
+int inode_get(int inumber, type *nType, union Data *data, char *syncstrat)
 {
 	/* Used for testing synchronization speedup */
 	insert_delay(DELAY);
 
 	/*Critical Zone Beggining*/
-	pthread_mutex_lock(&fsMutex);
+	fsLock(syncstrat, 'r');
 	if ((inumber < 0) || (inumber > INODE_TABLE_SIZE) || (inode_table[inumber].nodeType == T_NONE))
 	{
 		printf("inode_get: invalid inumber %d\n", inumber);
-		pthread_mutex_unlock(&fsMutex);
+		fsUnlock(syncstrat);
 		return FAIL;
 	}
 
@@ -150,7 +207,7 @@ int inode_get(int inumber, type *nType, union Data *data)
 	if (data)
 		*data = inode_table[inumber].data;
 
-	pthread_mutex_unlock(&fsMutex);
+	fsUnlock(syncstrat);
 	return SUCCESS;
 }
 
@@ -161,23 +218,23 @@ int inode_get(int inumber, type *nType, union Data *data)
  *  - sub_inumber: identifier of the sub i-node entry
  * Returns: SUCCESS or FAIL
  */
-int dir_reset_entry(int inumber, int sub_inumber)
+int dir_reset_entry(int inumber, int sub_inumber, char *syncstrat)
 {
 	/* Used for testing synchronization speedup */
 	insert_delay(DELAY);
 
 	/*Critical Zone Beggining*/
-	pthread_mutex_lock(&fsMutex);
+	fsLock(syncstrat, 'w');
 	if ((inumber < 0) || (inumber > INODE_TABLE_SIZE) || (inode_table[inumber].nodeType == T_NONE))
 	{
-		pthread_mutex_unlock(&fsMutex);
+		fsUnlock(syncstrat);
 		printf("inode_reset_entry: invalid inumber\n");
 		return FAIL;
 	}
 
 	if (inode_table[inumber].nodeType != T_DIRECTORY)
 	{
-		pthread_mutex_unlock(&fsMutex);
+		fsUnlock(syncstrat);
 		printf("inode_reset_entry: can only reset entry to directories\n");
 		return FAIL;
 	}
@@ -185,7 +242,7 @@ int dir_reset_entry(int inumber, int sub_inumber)
 	if ((sub_inumber < FREE_INODE) || (sub_inumber > INODE_TABLE_SIZE) ||
 		(inode_table[sub_inumber].nodeType == T_NONE))
 	{
-		pthread_mutex_unlock(&fsMutex);
+		fsUnlock(syncstrat);
 		printf("inode_reset_entry: invalid entry inumber\n");
 		return FAIL;
 	}
@@ -196,11 +253,11 @@ int dir_reset_entry(int inumber, int sub_inumber)
 		{
 			inode_table[inumber].data.dirEntries[i].inumber = FREE_INODE;
 			inode_table[inumber].data.dirEntries[i].name[0] = '\0';
-			pthread_mutex_unlock(&fsMutex);
+			fsUnlock(syncstrat);
 			return SUCCESS;
 		}
 	}
-	pthread_mutex_unlock(&fsMutex);
+	fsUnlock(syncstrat);
 	return FAIL;
 }
 
@@ -212,16 +269,16 @@ int dir_reset_entry(int inumber, int sub_inumber)
  *  - sub_name: name of the sub i-node entry 
  * Returns: SUCCESS or FAIL
  */
-int dir_add_entry(int inumber, int sub_inumber, char *sub_name)
+int dir_add_entry(int inumber, int sub_inumber, char *sub_name, char *syncstrat)
 {
 	/* Used for testing synchronization speedup */
 	insert_delay(DELAY);
 
 	/*Critical Zone Beggining*/
-	pthread_mutex_lock(&fsMutex);
+	fsLock(syncstrat, 'w');
 	if ((inumber < 0) || (inumber > INODE_TABLE_SIZE) || (inode_table[inumber].nodeType == T_NONE))
 	{
-		pthread_mutex_unlock(&fsMutex);
+		fsUnlock(syncstrat);
 		printf("inode_add_entry: invalid inumber\n");
 		return FAIL;
 	}
@@ -229,21 +286,21 @@ int dir_add_entry(int inumber, int sub_inumber, char *sub_name)
 	if (inode_table[inumber].nodeType != T_DIRECTORY)
 	{
 
-		pthread_mutex_unlock(&fsMutex);
+		fsUnlock(syncstrat);
 		printf("inode_add_entry: can only add entry to directories\n");
 		return FAIL;
 	}
 
 	if ((sub_inumber < 0) || (sub_inumber > INODE_TABLE_SIZE) || (inode_table[sub_inumber].nodeType == T_NONE))
 	{
-		pthread_mutex_unlock(&fsMutex);
+		fsUnlock(syncstrat);
 		printf("inode_add_entry: invalid entry inumber\n");
 		return FAIL;
 	}
 
 	if (strlen(sub_name) == 0)
 	{
-		pthread_mutex_unlock(&fsMutex);
+		fsUnlock(syncstrat);
 		printf("inode_add_entry: \
                entry name must be non-empty\n");
 		return FAIL;
@@ -255,11 +312,11 @@ int dir_add_entry(int inumber, int sub_inumber, char *sub_name)
 		{
 			inode_table[inumber].data.dirEntries[i].inumber = sub_inumber;
 			strcpy(inode_table[inumber].data.dirEntries[i].name, sub_name);
-			pthread_mutex_unlock(&fsMutex);
+			fsUnlock(syncstrat);
 			return SUCCESS;
 		}
 	}
-	pthread_mutex_unlock(&fsMutex);
+	fsUnlock(syncstrat);
 	return FAIL;
 }
 

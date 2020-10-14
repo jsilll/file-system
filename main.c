@@ -16,7 +16,52 @@ char inputCommands[MAX_COMMANDS][MAX_INPUT_SIZE];
 int numberCommands = 0;
 int headQueue = 0;
 
-pthread_mutex_t commandsMutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t commandsMutex;
+pthread_rwlock_t commandsRWLock;
+
+void commandsLock(char *syncstrat, char type)
+{
+	switch (syncstrat[0])
+	{
+	case 'm': /* mutex */
+		pthread_mutex_lock(&commandsMutex);
+		break;
+	case 'r': /* rwlock */
+		switch (type)
+		{
+		case 'r': /* read */
+			pthread_rwlock_rdlock(&commandsRWLock);
+			break;
+		case 'w': /* write */
+			pthread_rwlock_wrlock(&commandsRWLock);
+			break;
+		default:
+			break;
+		}
+		break;
+	case 'n':
+		break;
+	default:
+		break;
+	}
+}
+
+void commandsUnlock(char *syncstrat)
+{
+	switch (syncstrat[0])
+	{
+	case 'm':
+		pthread_mutex_unlock(&commandsMutex);
+		break;
+	case 'r':
+		pthread_rwlock_unlock(&commandsRWLock);
+		break;
+	case 'n':
+		break;
+	default:
+		break;
+	}
+}
 
 void validateInitArgs(int argc, char *argv[])
 {
@@ -149,9 +194,9 @@ void *queueWorker(void *syncstrat)
 {
 	while (numberCommands > 0)
 	{
-		pthread_mutex_lock(&commandsMutex);
+		commandsLock((char *)syncstrat, 'w');
 		const char *command = removeCommand();
-		pthread_mutex_unlock(&commandsMutex);
+		commandsUnlock((char *)syncstrat);
 		char token, type;
 		char name[MAX_INPUT_SIZE];
 		int numTokens = sscanf(command, "%c %s %c", &token, name, &type);
@@ -168,11 +213,11 @@ void *queueWorker(void *syncstrat)
 			{
 			case 'f':
 				printf("Create file: %s\n", name);
-				create(name, T_FILE);
+				create(name, T_FILE, (char *)syncstrat);
 				break;
 			case 'd':
 				printf("Create directory: %s\n", name);
-				create(name, T_DIRECTORY);
+				create(name, T_DIRECTORY, (char *)syncstrat);
 				break;
 			default:
 				fprintf(stderr, "Error: invalid node type\n");
@@ -180,7 +225,7 @@ void *queueWorker(void *syncstrat)
 			}
 			break;
 		case 'l':
-			searchResult = lookup(name);
+			searchResult = lookup(name, (char *)syncstrat);
 			if (searchResult >= 0)
 				printf("Search: %s found\n", name);
 			else
@@ -188,7 +233,7 @@ void *queueWorker(void *syncstrat)
 			break;
 		case 'd':
 			printf("Delete: %s\n", name);
-			delete (name);
+			delete (name, (char *)syncstrat);
 			break;
 		default:
 		{
@@ -207,7 +252,7 @@ void executeThreads(char *threads_count_char, char *syncstrat)
 	pthread_t tid[threads_count];
 	for (i = 0; i < threads_count; i++)
 	{
-		if (pthread_create(&tid[i], NULL, queueWorker, syncstrat) != 0)
+		if (pthread_create(&tid[i], NULL, queueWorker, (void *)syncstrat) != 0)
 			fprintf(stderr, "Failed to create thread %d.\n", i);
 	}
 	for (i = 0; i < threads_count; i++)
@@ -229,17 +274,23 @@ int main(int argc, char *argv[])
 {
 	struct timeval begin, end;
 	FILE *file_buffer;
+
+	pthread_mutex_init(&commandsMutex, NULL);
+	pthread_rwlock_init(&commandsRWLock, NULL);
+
 	gettimeofday(&begin, 0);
 	validateInitArgs(argc, argv);
 	init_fs();
+
 	file_buffer = fopenSafe(argv[1], "r");
 	processInput(file_buffer);
 	fcloseSafe(file_buffer);
-	file_buffer = fopenSafe(argv[2], "w");
 	executeThreads(argv[3], argv[4]);
+	file_buffer = fopenSafe(argv[2], "w");
 	print_tecnicofs_tree(file_buffer);
 	fcloseSafe(file_buffer);
 	destroy_fs();
+
 	gettimeofday(&end, 0);
 	printf("TecnicoFS completed in %.4f seconds.\n", timeDiff(&begin, &end));
 	exit(EXIT_SUCCESS);
