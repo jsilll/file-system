@@ -31,17 +31,20 @@ void fsLock(char *syncstrat, char type)
 	switch (syncstrat[0])
 	{
 	case 'm': /* mutex */
-		pthread_mutex_lock(&fsMutex);
+		if (pthread_mutex_lock(&fsMutex) != 0)
+			exit(EXIT_FAILURE);
 		break;
 	case 'r': /* rwlock */
 		switch (type)
 		{
 		case 'r':
-			pthread_rwlock_rdlock(&fsRWLock);
+			if (pthread_rwlock_rdlock(&fsRWLock) != 0)
+				exit(EXIT_FAILURE);
 			break;
 		case 'w':
+			if (pthread_rwlock_wrlock(&fsRWLock) != 0)
+				exit(EXIT_FAILURE);
 			break;
-			pthread_rwlock_wrlock(&fsRWLock);
 		default:
 			break;
 		}
@@ -62,10 +65,12 @@ void fsUnlock(char *syncstrat)
 	switch (syncstrat[0])
 	{
 	case 'm':
-		pthread_mutex_unlock(&fsMutex);
+		if (pthread_mutex_unlock(&fsMutex) != 0)
+			exit(EXIT_FAILURE);
 		break;
 	case 'r':
-		pthread_rwlock_unlock(&fsRWLock);
+		if (pthread_rwlock_unlock(&fsRWLock) != 0)
+			exit(EXIT_FAILURE);
 		break;
 	case 'n':
 		break;

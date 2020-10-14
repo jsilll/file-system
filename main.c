@@ -24,16 +24,19 @@ void commandsLock(char *syncstrat, char type)
 	switch (syncstrat[0])
 	{
 	case 'm': /* mutex */
-		pthread_mutex_lock(&commandsMutex);
+		if (pthread_mutex_lock(&commandsMutex) != 0)
+			exit(EXIT_FAILURE);
 		break;
 	case 'r': /* rwlock */
 		switch (type)
 		{
 		case 'r': /* read */
-			pthread_rwlock_rdlock(&commandsRWLock);
+			if (pthread_rwlock_rdlock(&commandsRWLock) != 0)
+				exit(EXIT_FAILURE);
 			break;
 		case 'w': /* write */
-			pthread_rwlock_wrlock(&commandsRWLock);
+			if (pthread_rwlock_wrlock(&commandsRWLock) != 0)
+				exit(EXIT_FAILURE);
 			break;
 		default:
 			break;
@@ -51,10 +54,12 @@ void commandsUnlock(char *syncstrat)
 	switch (syncstrat[0])
 	{
 	case 'm':
-		pthread_mutex_unlock(&commandsMutex);
+		if (pthread_mutex_unlock(&commandsMutex) != 0)
+			exit(EXIT_FAILURE);
 		break;
 	case 'r':
-		pthread_rwlock_unlock(&commandsRWLock);
+		if (pthread_rwlock_unlock(&commandsRWLock) != 0)
+			exit(EXIT_FAILURE);
 		break;
 	case 'n':
 		break;
@@ -275,17 +280,18 @@ int main(int argc, char *argv[])
 	struct timeval begin, end;
 	FILE *file_buffer;
 
-	pthread_mutex_init(&commandsMutex, NULL);
-	pthread_rwlock_init(&commandsRWLock, NULL);
-
 	gettimeofday(&begin, 0);
 	validateInitArgs(argc, argv);
-	init_fs();
 
 	file_buffer = fopenSafe(argv[1], "r");
 	processInput(file_buffer);
 	fcloseSafe(file_buffer);
+
+	init_fs();
+	pthread_mutex_init(&commandsMutex, NULL);
+	pthread_rwlock_init(&commandsRWLock, NULL);
 	executeThreads(argv[3], argv[4]);
+
 	file_buffer = fopenSafe(argv[2], "w");
 	print_tecnicofs_tree(file_buffer);
 	fcloseSafe(file_buffer);
