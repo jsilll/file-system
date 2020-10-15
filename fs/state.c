@@ -8,7 +8,6 @@
 #include <pthread.h>
 
 inode_t inode_table[INODE_TABLE_SIZE];
-
 pthread_mutex_t fsMutex;
 pthread_rwlock_t fsRWLock;
 
@@ -100,6 +99,9 @@ void inode_table_init()
  */
 void inode_table_destroy()
 {
+	pthread_mutex_destroy(&fsMutex);
+	pthread_rwlock_destroy(&fsRWLock);
+
 	for (int i = 0; i < INODE_TABLE_SIZE; i++)
 	{
 		if (inode_table[i].nodeType != T_NONE)

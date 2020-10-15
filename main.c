@@ -17,56 +17,6 @@ int numberCommands = 0;
 int headQueue = 0;
 
 pthread_mutex_t commandsMutex;
-pthread_rwlock_t commandsRWLock;
-
-void commandsLock(char *syncstrat, char type)
-{
-	switch (syncstrat[0])
-	{
-	case 'm': /* mutex */
-		if (pthread_mutex_lock(&commandsMutex) != 0)
-			exit(EXIT_FAILURE);
-		break;
-	case 'r': /* rwlock */
-		switch (type)
-		{
-		case 'r': /* read */
-			if (pthread_rwlock_rdlock(&commandsRWLock) != 0)
-				exit(EXIT_FAILURE);
-			break;
-		case 'w': /* write */
-			if (pthread_rwlock_wrlock(&commandsRWLock) != 0)
-				exit(EXIT_FAILURE);
-			break;
-		default:
-			break;
-		}
-		break;
-	case 'n':
-		break;
-	default:
-		break;
-	}
-}
-
-void commandsUnlock(char *syncstrat)
-{
-	switch (syncstrat[0])
-	{
-	case 'm':
-		if (pthread_mutex_unlock(&commandsMutex) != 0)
-			exit(EXIT_FAILURE);
-		break;
-	case 'r':
-		if (pthread_rwlock_unlock(&commandsRWLock) != 0)
-			exit(EXIT_FAILURE);
-		break;
-	case 'n':
-		break;
-	default:
-		break;
-	}
-}
 
 void validateInitArgs(int argc, char *argv[])
 {
@@ -199,9 +149,9 @@ void *queueWorker(void *syncstrat)
 {
 	while (numberCommands > 0)
 	{
-		commandsLock((char *)syncstrat, 'w');
+		pthread_mutex_lock(&commandsMutex);
 		const char *command = removeCommand();
-		commandsUnlock((char *)syncstrat);
+		pthread_mutex_unlock(&commandsMutex);
 		char token, type;
 		char name[MAX_INPUT_SIZE];
 		int numTokens = sscanf(command, "%c %s %c", &token, name, &type);
@@ -255,6 +205,7 @@ void executeThreads(char *threads_count_char, char *syncstrat)
 	int i, *result;
 	int threads_count = atoi(threads_count_char);
 	pthread_t tid[threads_count];
+	pthread_mutex_init(&commandsMutex, NULL);
 	for (i = 0; i < threads_count; i++)
 	{
 		if (pthread_create(&tid[i], NULL, queueWorker, (void *)syncstrat) != 0)
@@ -265,6 +216,7 @@ void executeThreads(char *threads_count_char, char *syncstrat)
 		if (pthread_join(tid[i], (void **)&result) != 0)
 			printf("Error while joining thread.\n");
 	}
+	pthread_mutex_destroy(&commandsMutex);
 }
 
 double timeDiff(struct timeval *begin, struct timeval *end)
@@ -280,16 +232,14 @@ int main(int argc, char *argv[])
 	struct timeval begin, end;
 	FILE *file_buffer;
 
-	gettimeofday(&begin, 0);
 	validateInitArgs(argc, argv);
+	init_fs();
 
 	file_buffer = fopenSafe(argv[1], "r");
 	processInput(file_buffer);
 	fcloseSafe(file_buffer);
 
-	init_fs();
-	pthread_mutex_init(&commandsMutex, NULL);
-	pthread_rwlock_init(&commandsRWLock, NULL);
+	gettimeofday(&begin, 0);
 	executeThreads(argv[3], argv[4]);
 
 	file_buffer = fopenSafe(argv[2], "w");
