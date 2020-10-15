@@ -18,6 +18,32 @@ int headQueue = 0;
 
 pthread_mutex_t commandsMutex;
 
+void commandsLock(char *syncstrat)
+{
+	switch (syncstrat[0])
+	{
+	case 'n':
+		break;
+
+	default:
+		pthread_mutex_lock(&commandsMutex);
+		break;
+	}
+}
+
+void commandsUnlock(char *syncstrat)
+{
+	switch (syncstrat[0])
+	{
+	case 'n':
+		break;
+
+	default:
+		pthread_mutex_unlock(&commandsMutex);
+		break;
+	}
+}
+
 void validateInitArgs(int argc, char *argv[])
 {
 	/* Usage: ./tecnicofs inputfile outputfile numthreads synchstrategy */
@@ -149,9 +175,9 @@ void *queueWorker(void *syncstrat)
 {
 	while (numberCommands > 0)
 	{
-		pthread_mutex_lock(&commandsMutex);
+		commandsLock((char *)syncstrat);
 		const char *command = removeCommand();
-		pthread_mutex_unlock(&commandsMutex);
+		commandsUnlock((char *)syncstrat);
 		char token, type;
 		char name[MAX_INPUT_SIZE];
 		int numTokens = sscanf(command, "%c %s %c", &token, name, &type);
