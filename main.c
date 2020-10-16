@@ -26,7 +26,8 @@ void commandsLock(char *syncstrat)
 		break;
 
 	default:
-		pthread_mutex_lock(&commandsMutex);
+		if (pthread_mutex_lock(&commandsMutex) != 0)
+			exit(EXIT_FAILURE);
 		break;
 	}
 }
@@ -39,7 +40,8 @@ void commandsUnlock(char *syncstrat)
 		break;
 
 	default:
-		pthread_mutex_unlock(&commandsMutex);
+		if (pthread_mutex_unlock(&commandsMutex) != 0)
+			exit(EXIT_FAILURE);
 		break;
 	}
 }
@@ -173,54 +175,65 @@ void processInput(FILE *commands_file)
 
 void *queueWorker(void *syncstrat)
 {
-	while (numberCommands > 0)
+	while (1)
 	{
 		commandsLock((char *)syncstrat);
-		const char *command = removeCommand();
-		commandsUnlock((char *)syncstrat);
-		char token, type;
-		char name[MAX_INPUT_SIZE];
-		int numTokens = sscanf(command, "%c %s %c", &token, name, &type);
-		if (numTokens < 2)
+		if (numberCommands > 0)
 		{
-			fprintf(stderr, "Error: invalid command in Queue\n");
-			exit(EXIT_FAILURE);
-		}
-		int searchResult;
-		switch (token)
-		{
-		case 'c':
-			switch (type)
+			/* Read the new command */
+			const char *command = removeCommand();
+			commandsUnlock((char *)syncstrat);
+
+			char token, type;
+			char name[MAX_INPUT_SIZE];
+			int numTokens = sscanf(command, "%c %s %c", &token, name, &type);
+			if (numTokens < 2)
 			{
-			case 'f':
-				printf("Create file: %s\n", name);
-				create(name, T_FILE, (char *)syncstrat);
-				break;
-			case 'd':
-				printf("Create directory: %s\n", name);
-				create(name, T_DIRECTORY, (char *)syncstrat);
-				break;
-			default:
-				fprintf(stderr, "Error: invalid node type\n");
+				fprintf(stderr, "Error: invalid command in Queue\n");
 				exit(EXIT_FAILURE);
 			}
-			break;
-		case 'l':
-			searchResult = lookup(name, (char *)syncstrat);
-			if (searchResult >= 0)
-				printf("Search: %s found\n", name);
-			else
-				printf("Search: %s not found\n", name);
-			break;
-		case 'd':
-			printf("Delete: %s\n", name);
-			delete (name, (char *)syncstrat);
-			break;
-		default:
-		{
-			fprintf(stderr, "Error: command to apply\n");
-			exit(EXIT_FAILURE);
+			int searchResult;
+			switch (token)
+			{
+			case 'c':
+				switch (type)
+				{
+				case 'f':
+					printf("Create file: %s\n", name);
+					create(name, T_FILE, (char *)syncstrat);
+					break;
+				case 'd':
+					printf("Create directory: %s\n", name);
+					create(name, T_DIRECTORY, (char *)syncstrat);
+					break;
+				default:
+					fprintf(stderr, "Error: invalid node type\n");
+					exit(EXIT_FAILURE);
+				}
+				break;
+			case 'l':
+				searchResult = lookup(name, (char *)syncstrat);
+				if (searchResult >= 0)
+					printf("Search: %s found\n", name);
+				else
+					printf("Search: %s not found\n", name);
+				break;
+			case 'd':
+				printf("Delete: %s\n", name);
+				delete (name, (char *)syncstrat);
+				break;
+			default:
+			{
+				fprintf(stderr, "Error: command to apply\n");
+				exit(EXIT_FAILURE);
+			}
+			}
 		}
+		else
+		{
+			/* There's no more commands to read, then return */
+			commandsUnlock((char *)syncstrat);
+			break;
 		}
 	}
 	return NULL;
