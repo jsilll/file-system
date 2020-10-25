@@ -8,8 +8,34 @@
 #include <pthread.h>
 
 inode_t inode_table[INODE_TABLE_SIZE];
-pthread_mutex_t fsMutex;
-pthread_rwlock_t fsRWLock;
+
+void inodeLock(char lockmethod, int inumber) {
+	
+	switch (lockmethod)
+	{
+	case 'r':
+		printf("Locking inumber %d in mode %c\n", inumber, lockmethod);
+		if(pthread_rwlock_rdlock(&inode_table[inumber].lock) != 0)
+			exit(EXIT_FAILURE);
+		break;
+	
+	case 'w':
+		printf("Locking inumber %d in mode %c\n", inumber, lockmethod);
+		if(pthread_rwlock_wrlock(&inode_table[inumber].lock) != 0)
+			exit(EXIT_FAILURE);
+		break;
+
+	default:
+		exit(EXIT_FAILURE);
+		break;
+	}
+
+}
+void inodeUnlock(int inumber) {
+	printf("Unlocing inumber %d\n", inumber);
+	if(pthread_rwlock_unlock(&inode_table[inumber].lock) != 0)
+		exit(EXIT_FAILURE);
+}
 
 /*
  * Sleeps for synchronization testing.
@@ -22,72 +48,14 @@ void insert_delay(int cycles)
 }
 
 /*
- * Function for responsible for locking the fs structure, supports
- * mutex, rwlock and nosync
- */
-void fsLock(char *syncstrat, char type)
-{
-	switch (syncstrat[0])
-	{
-	case 'm': /* mutex */
-		if (pthread_mutex_lock(&fsMutex) != 0)
-			exit(EXIT_FAILURE);
-		break;
-	case 'r': /* rwlock */
-		switch (type)
-		{
-		case 'r':
-			if (pthread_rwlock_rdlock(&fsRWLock) != 0)
-				exit(EXIT_FAILURE);
-			break;
-		case 'w':
-			if (pthread_rwlock_wrlock(&fsRWLock) != 0)
-				exit(EXIT_FAILURE);
-			break;
-		default:
-			break;
-		}
-		break;
-	case 'n':
-		break;
-	default:
-		break;
-	}
-}
-
-/*
- * Function for responsible for unlocking the fs structure, supports
- * mutex, rwlock and nosync
- */
-void fsUnlock(char *syncstrat)
-{
-	switch (syncstrat[0])
-	{
-	case 'm':
-		if (pthread_mutex_unlock(&fsMutex) != 0)
-			exit(EXIT_FAILURE);
-		break;
-	case 'r':
-		if (pthread_rwlock_unlock(&fsRWLock) != 0)
-			exit(EXIT_FAILURE);
-		break;
-	case 'n':
-		break;
-	default:
-		break;
-	}
-}
-
-/*
  * Initializes the i-nodes table.
  */
 void inode_table_init()
 {
-	pthread_mutex_init(&fsMutex, NULL);
-	pthread_rwlock_init(&fsRWLock, NULL);
-
 	for (int i = 0; i < INODE_TABLE_SIZE; i++)
 	{
+		if (pthread_rwlock_init(&inode_table[i].lock, NULL) != 0)
+			exit(EXIT_FAILURE);
 		inode_table[i].nodeType = T_NONE;
 		inode_table[i].data.dirEntries = NULL;
 		inode_table[i].data.fileContents = NULL;
@@ -99,11 +67,11 @@ void inode_table_init()
  */
 void inode_table_destroy()
 {
-	pthread_mutex_destroy(&fsMutex);
-	pthread_rwlock_destroy(&fsRWLock);
 
 	for (int i = 0; i < INODE_TABLE_SIZE; i++)
 	{
+		if (pthread_rwlock_destroy(&inode_table[i].lock) != 0)
+			exit(EXIT_FAILURE);
 		if (inode_table[i].nodeType != T_NONE)
 		{
 			/* as data is an union, the same pointer is used for both dirEntries and fileContents */
@@ -122,19 +90,17 @@ void inode_table_destroy()
  *  inumber: identifier of the new i-node, if successfully created
  *     FAIL: if an error occurs
  */
-int inode_create(type nType, char *syncstrat)
+int inode_create(type nType)
 {
 	/* Used for testing synchronization speedup */
 	insert_delay(DELAY);
 
-	/*Critical Zone Beggining*/
-	fsLock(syncstrat, 'w');
 	for (int inumber = 0; inumber < INODE_TABLE_SIZE; inumber++)
 	{
+		inodeLock('w', inumber);
 		if (inode_table[inumber].nodeType == T_NONE)
 		{
 			inode_table[inumber].nodeType = nType;
-
 			if (nType == T_DIRECTORY)
 			{
 				/* Initializes entry table */
@@ -149,11 +115,12 @@ int inode_create(type nType, char *syncstrat)
 			{
 				inode_table[inumber].data.fileContents = NULL;
 			}
-			fsUnlock(syncstrat);
+			inodeUnlock(inumber);
 			return inumber;
 		}
+		inodeUnlock(inumber);
 	}
-	fsUnlock(syncstrat);
+
 	return FAIL;
 }
 
@@ -163,16 +130,14 @@ int inode_create(type nType, char *syncstrat)
  *  - inumber: identifier of the i-node
  * Returns: SUCCESS or FAIL
  */
-int inode_delete(int inumber, char *syncstrat)
+int inode_delete(int inumber)
 {
 	/* Used for testing synchronization speedup */
 	insert_delay(DELAY);
 
 	/*Critical Zone Beggining*/
-	fsLock(syncstrat, 'w');
 	if ((inumber < 0) || (inumber > INODE_TABLE_SIZE) || (inode_table[inumber].nodeType == T_NONE))
 	{
-		fsUnlock(syncstrat);
 		printf("inode_delete: invalid inumber\n");
 		return FAIL;
 	}
@@ -181,7 +146,6 @@ int inode_delete(int inumber, char *syncstrat)
 	/* see inode_table_destroy function */
 	if (inode_table[inumber].data.dirEntries)
 		free(inode_table[inumber].data.dirEntries);
-	fsUnlock(syncstrat);
 	return SUCCESS;
 }
 
@@ -194,27 +158,23 @@ int inode_delete(int inumber, char *syncstrat)
  *  - data: pointer to data
  * Returns: SUCCESS or FAIL
  */
-int inode_get(int inumber, type *nType, union Data *data, char *syncstrat)
+int inode_get(int inumber, type *nType, union Data *data)
 {
 	/* Used for testing synchronization speedup */
 	insert_delay(DELAY);
 
 	/*Critical Zone Beggining*/
-	fsLock(syncstrat, 'r');
 	if ((inumber < 0) || (inumber > INODE_TABLE_SIZE) || (inode_table[inumber].nodeType == T_NONE))
 	{
 		printf("inode_get: invalid inumber %d\n", inumber);
-		fsUnlock(syncstrat);
 		return FAIL;
 	}
-
 	if (nType)
 		*nType = inode_table[inumber].nodeType;
 
 	if (data)
 		*data = inode_table[inumber].data;
 
-	fsUnlock(syncstrat);
 	return SUCCESS;
 }
 
@@ -225,23 +185,20 @@ int inode_get(int inumber, type *nType, union Data *data, char *syncstrat)
  *  - sub_inumber: identifier of the sub i-node entry
  * Returns: SUCCESS or FAIL
  */
-int dir_reset_entry(int inumber, int sub_inumber, char *syncstrat)
+int dir_reset_entry(int inumber, int sub_inumber)
 {
 	/* Used for testing synchronization speedup */
 	insert_delay(DELAY);
 
 	/*Critical Zone Beggining*/
-	fsLock(syncstrat, 'w');
 	if ((inumber < 0) || (inumber > INODE_TABLE_SIZE) || (inode_table[inumber].nodeType == T_NONE))
 	{
-		fsUnlock(syncstrat);
 		printf("inode_reset_entry: invalid inumber\n");
 		return FAIL;
 	}
 
 	if (inode_table[inumber].nodeType != T_DIRECTORY)
 	{
-		fsUnlock(syncstrat);
 		printf("inode_reset_entry: can only reset entry to directories\n");
 		return FAIL;
 	}
@@ -249,7 +206,6 @@ int dir_reset_entry(int inumber, int sub_inumber, char *syncstrat)
 	if ((sub_inumber < FREE_INODE) || (sub_inumber > INODE_TABLE_SIZE) ||
 		(inode_table[sub_inumber].nodeType == T_NONE))
 	{
-		fsUnlock(syncstrat);
 		printf("inode_reset_entry: invalid entry inumber\n");
 		return FAIL;
 	}
@@ -260,11 +216,9 @@ int dir_reset_entry(int inumber, int sub_inumber, char *syncstrat)
 		{
 			inode_table[inumber].data.dirEntries[i].inumber = FREE_INODE;
 			inode_table[inumber].data.dirEntries[i].name[0] = '\0';
-			fsUnlock(syncstrat);
 			return SUCCESS;
 		}
 	}
-	fsUnlock(syncstrat);
 	return FAIL;
 }
 
@@ -276,16 +230,14 @@ int dir_reset_entry(int inumber, int sub_inumber, char *syncstrat)
  *  - sub_name: name of the sub i-node entry 
  * Returns: SUCCESS or FAIL
  */
-int dir_add_entry(int inumber, int sub_inumber, char *sub_name, char *syncstrat)
+int dir_add_entry(int inumber, int sub_inumber, char *sub_name)
 {
 	/* Used for testing synchronization speedup */
 	insert_delay(DELAY);
 
 	/*Critical Zone Beggining*/
-	fsLock(syncstrat, 'w');
 	if ((inumber < 0) || (inumber > INODE_TABLE_SIZE) || (inode_table[inumber].nodeType == T_NONE))
 	{
-		fsUnlock(syncstrat);
 		printf("inode_add_entry: invalid inumber\n");
 		return FAIL;
 	}
@@ -293,21 +245,18 @@ int dir_add_entry(int inumber, int sub_inumber, char *sub_name, char *syncstrat)
 	if (inode_table[inumber].nodeType != T_DIRECTORY)
 	{
 
-		fsUnlock(syncstrat);
 		printf("inode_add_entry: can only add entry to directories\n");
 		return FAIL;
 	}
 
 	if ((sub_inumber < 0) || (sub_inumber > INODE_TABLE_SIZE) || (inode_table[sub_inumber].nodeType == T_NONE))
 	{
-		fsUnlock(syncstrat);
 		printf("inode_add_entry: invalid entry inumber\n");
 		return FAIL;
 	}
 
 	if (strlen(sub_name) == 0)
 	{
-		fsUnlock(syncstrat);
 		printf("inode_add_entry: \
                entry name must be non-empty\n");
 		return FAIL;
@@ -319,11 +268,9 @@ int dir_add_entry(int inumber, int sub_inumber, char *sub_name, char *syncstrat)
 		{
 			inode_table[inumber].data.dirEntries[i].inumber = sub_inumber;
 			strcpy(inode_table[inumber].data.dirEntries[i].name, sub_name);
-			fsUnlock(syncstrat);
 			return SUCCESS;
 		}
 	}
-	fsUnlock(syncstrat);
 	return FAIL;
 }
 

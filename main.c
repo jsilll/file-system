@@ -18,56 +18,29 @@ int headQueue = 0;
 
 pthread_mutex_t commandsMutex;
 
-void commandsLock(char *syncstrat)
+void commandsLock()
 {
-	switch (syncstrat[0])
-	{
-	case 'n':
-		break;
-
-	default:
-		if (pthread_mutex_lock(&commandsMutex) != 0)
-			exit(EXIT_FAILURE);
-		break;
-	}
+	if (pthread_mutex_lock(&commandsMutex) != 0)
+		exit(EXIT_FAILURE);
 }
 
-void commandsUnlock(char *syncstrat)
+void commandsUnlock()
 {
-	switch (syncstrat[0])
-	{
-	case 'n':
-		break;
-
-	default:
-		if (pthread_mutex_unlock(&commandsMutex) != 0)
-			exit(EXIT_FAILURE);
-		break;
-	}
+	if (pthread_mutex_unlock(&commandsMutex) != 0)
+		exit(EXIT_FAILURE);
 }
 
 void validateInitArgs(int argc, char *argv[])
 {
-	/* Usage: ./tecnicofs inputfile outputfile numthreads synchstrategy */
-	if (argc != 5)
+	/* Usage: ./tecnicofs inputfile outputfile numthreads*/
+	if (argc != 4)
 	{
-		fprintf(stderr, "Usage: [inputfile] [outputfile] [numthreads] [synchstrategy].\n");
+		fprintf(stderr, "Usage: [inputfile] [outputfile] [numthreads].\n");
 		exit(EXIT_FAILURE);
 	}
 	else if (atoi(argv[3]) <= 0)
 	{
 		fprintf(stderr, "Invalid numthreads.\n");
-		exit(EXIT_FAILURE);
-	}
-	/* Synchstrategy */
-	else if (strcmp(argv[4], "mutex") && strcmp(argv[4], "rwlock") && strcmp(argv[4], "nosync"))
-	{
-		fprintf(stderr, "Invalid synchstrategy.\n");
-		exit(EXIT_FAILURE);
-	}
-	else if (!strcmp(argv[4], "nosync") && atoi(argv[3]) != 1)
-	{
-		fprintf(stderr, "Synchstrategy 'nosync' only allowed with 1 thread.\n");
 		exit(EXIT_FAILURE);
 	}
 }
@@ -134,7 +107,6 @@ void processInput(FILE *commands_file)
 	char line[MAX_INPUT_SIZE];
 	int n = sizeof(line) / sizeof(char);
 	/* break loop with ^Z or ^D */
-
 	while (fgets(line, n, commands_file))
 	{
 		char token, type;
@@ -173,16 +145,16 @@ void processInput(FILE *commands_file)
 	}
 }
 
-void *queueWorker(void *syncstrat)
+void *queueWorker()
 {
 	while (1)
 	{
-		commandsLock((char *)syncstrat);
+		commandsLock();
 		if (numberCommands > 0)
 		{
 			/* Read the new command */
 			const char *command = removeCommand();
-			commandsUnlock((char *)syncstrat);
+			commandsUnlock();
 
 			char token, type;
 			char name[MAX_INPUT_SIZE];
@@ -200,11 +172,11 @@ void *queueWorker(void *syncstrat)
 				{
 				case 'f':
 					printf("Create file: %s\n", name);
-					create(name, T_FILE, (char *)syncstrat);
+					create(name, T_FILE);
 					break;
 				case 'd':
 					printf("Create directory: %s\n", name);
-					create(name, T_DIRECTORY, (char *)syncstrat);
+					create(name, T_DIRECTORY);
 					break;
 				default:
 					fprintf(stderr, "Error: invalid node type\n");
@@ -212,7 +184,7 @@ void *queueWorker(void *syncstrat)
 				}
 				break;
 			case 'l':
-				searchResult = lookup(name, (char *)syncstrat);
+				searchResult = lookup(name);
 				if (searchResult >= 0)
 					printf("Search: %s found\n", name);
 				else
@@ -220,7 +192,7 @@ void *queueWorker(void *syncstrat)
 				break;
 			case 'd':
 				printf("Delete: %s\n", name);
-				delete (name, (char *)syncstrat);
+				delete (name);
 				break;
 			default:
 			{
@@ -232,14 +204,14 @@ void *queueWorker(void *syncstrat)
 		else
 		{
 			/* There's no more commands to read, then return */
-			commandsUnlock((char *)syncstrat);
+			commandsUnlock();
 			break;
 		}
 	}
 	return NULL;
 }
 
-void executeThreads(char *threads_count_char, char *syncstrat)
+void executeThreads(char *threads_count_char)
 {
 	int i, *result;
 	int threads_count = atoi(threads_count_char);
@@ -247,7 +219,7 @@ void executeThreads(char *threads_count_char, char *syncstrat)
 	pthread_mutex_init(&commandsMutex, NULL);
 	for (i = 0; i < threads_count; i++)
 	{
-		if (pthread_create(&tid[i], NULL, queueWorker, (void *)syncstrat) != 0)
+		if (pthread_create(&tid[i], NULL, queueWorker, NULL) != 0)
 			fprintf(stderr, "Failed to create thread %d.\n", i);
 	}
 	for (i = 0; i < threads_count; i++)
@@ -279,7 +251,7 @@ int main(int argc, char *argv[])
 	fcloseSafe(file_buffer);
 
 	gettimeofday(&begin, 0);
-	executeThreads(argv[3], argv[4]);
+	executeThreads(argv[3]);
 
 	file_buffer = fopenSafe(argv[2], "w");
 	print_tecnicofs_tree(file_buffer);
