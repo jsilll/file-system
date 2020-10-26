@@ -163,7 +163,7 @@ int create(char *name, type nodeType)
 
 	/* create node and add entry to folder that contains new node */
 	child_inumber = inode_create(nodeType);
-	
+
 	if (child_inumber == FAIL)
 	{
 		printf("failed to create %s in  %s, couldn't allocate inode\n",
@@ -211,7 +211,7 @@ int delete (char *name)
 	}
 
 	/* lockar aqui*/
-	inodeLock('w',parent_inumber);
+	inodeLock('w', parent_inumber);
 	inode_get(parent_inumber, &pType, &pdata);
 
 	if (pType != T_DIRECTORY)
@@ -223,7 +223,7 @@ int delete (char *name)
 	}
 
 	child_inumber = lookup_sub_node(child_name, pdata.dirEntries);
-	inodeLock('w',child_inumber);
+	inodeLock('w', child_inumber);
 
 	if (child_inumber == FAIL)
 	{
@@ -279,8 +279,9 @@ int delete (char *name)
  */
 int lookup(char *name)
 {
-	int locked[50] = {-1};
+	int locked[50] = {0};
 	int locked_ammount = 0;
+	char *saveptr;
 	char full_path[MAX_FILE_NAME];
 	char delim[] = "/";
 	strcpy(full_path, name);
@@ -295,10 +296,10 @@ int lookup(char *name)
 	/* Critical Zone */
 	inodeLock('r', current_inumber); /* Locking the root folder */
 	locked[locked_ammount++] = current_inumber;
-	
+
 	/* get root inode data */
 	inode_get(current_inumber, &nType, &data);
-	char *path = strtok(full_path, delim);
+	char *path = strtok_r(full_path, delim, &saveptr);
 
 	/* search for all sub nodes */
 	while (path != NULL && (current_inumber = lookup_sub_node(path, data.dirEntries)) != FAIL)
@@ -306,7 +307,7 @@ int lookup(char *name)
 		inodeLock('r', current_inumber); /*  Locking all the folders / files along the path */
 		locked[locked_ammount++] = current_inumber;
 		inode_get(current_inumber, &nType, &data);
-		path = strtok(NULL, delim);
+		path = strtok_r(NULL, delim, &saveptr);
 	}
 
 	for (int i = 0; i < locked_ammount; i++)

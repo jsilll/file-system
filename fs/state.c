@@ -9,19 +9,20 @@
 
 inode_t inode_table[INODE_TABLE_SIZE];
 
-void inodeLock(char lockmethod, int inumber) {
-	
+void inodeLock(char lockmethod, int inumber)
+{
+
 	switch (lockmethod)
 	{
 	case 'r':
 		printf("Locking inumber %d in mode %c\n", inumber, lockmethod);
-		if(pthread_rwlock_rdlock(&inode_table[inumber].lock) != 0)
+		if (pthread_rwlock_rdlock(&inode_table[inumber].lock) != 0)
 			exit(EXIT_FAILURE);
 		break;
-	
+
 	case 'w':
 		printf("Locking inumber %d in mode %c\n", inumber, lockmethod);
-		if(pthread_rwlock_wrlock(&inode_table[inumber].lock) != 0)
+		if (pthread_rwlock_wrlock(&inode_table[inumber].lock) != 0)
 			exit(EXIT_FAILURE);
 		break;
 
@@ -29,11 +30,11 @@ void inodeLock(char lockmethod, int inumber) {
 		exit(EXIT_FAILURE);
 		break;
 	}
-
 }
-void inodeUnlock(int inumber) {
+void inodeUnlock(int inumber)
+{
 	printf("Unlocing inumber %d\n", inumber);
-	if(pthread_rwlock_unlock(&inode_table[inumber].lock) != 0)
+	if (pthread_rwlock_unlock(&inode_table[inumber].lock) != 0)
 		exit(EXIT_FAILURE);
 }
 
@@ -162,7 +163,6 @@ int inode_get(int inumber, type *nType, union Data *data)
 {
 	/* Used for testing synchronization speedup */
 	insert_delay(DELAY);
-
 	/*Critical Zone Beggining*/
 	if ((inumber < 0) || (inumber > INODE_TABLE_SIZE) || (inode_table[inumber].nodeType == T_NONE))
 	{
