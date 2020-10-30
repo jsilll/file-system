@@ -173,10 +173,12 @@ void *queueWorker()
 				case 'f':
 					printf("Create file: %s\n", name);
 					create(name, T_FILE);
+					printf("Finished creating file: %s\n", name);
 					break;
 				case 'd':
 					printf("Create directory: %s\n", name);
 					create(name, T_DIRECTORY);
+					printf("Finsihed creating directory: %s\n", name);
 					break;
 				default:
 					fprintf(stderr, "Error: invalid node type\n");
@@ -184,6 +186,7 @@ void *queueWorker()
 				}
 				break;
 			case 'l':
+				printf("Searching for %s\n", name);
 				searchResult = lookup(name);
 				if (searchResult >= 0)
 					printf("Search: %s found\n", name);
@@ -193,6 +196,7 @@ void *queueWorker()
 			case 'd':
 				printf("Delete: %s\n", name);
 				delete (name);
+				printf("Finished Deleting: %s\n", name);
 				break;
 			default:
 			{

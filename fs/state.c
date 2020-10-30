@@ -31,6 +31,7 @@ void inodeLock(char lockmethod, int inumber)
 		break;
 	}
 }
+
 void inodeUnlock(int inumber)
 {
 	printf("Unlocking inumber %d\n", inumber);
@@ -98,30 +99,31 @@ int inode_create(type nType, int parent_inumber)
 
 	for (int inumber = 0; inumber < INODE_TABLE_SIZE; inumber++)
 	{
-		if (inumber != parent_inumber) {
-			inodeLock('w', inumber);
-			if (inode_table[inumber].nodeType == T_NONE)
-			{
-				inode_table[inumber].nodeType = nType;
-				if (nType == T_DIRECTORY)
-				{
-					/* Initializes entry table */
-					inode_table[inumber].data.dirEntries = malloc(sizeof(DirEntry) * MAX_DIR_ENTRIES);
+		/* If the inode is being used by other thread, we skip it */
+		if (pthread_rwlock_trywrlock(&inode_table[inumber].lock) != 0)
+			continue;
 
-					for (int i = 0; i < MAX_DIR_ENTRIES; i++)
-					{
-						inode_table[inumber].data.dirEntries[i].inumber = FREE_INODE;
-					}
-				}
-				else
+		if (inode_table[inumber].nodeType == T_NONE)
+		{
+			inode_table[inumber].nodeType = nType;
+			if (nType == T_DIRECTORY)
+			{
+				/* Initializes entry table */
+				inode_table[inumber].data.dirEntries = malloc(sizeof(DirEntry) * MAX_DIR_ENTRIES);
+
+				for (int i = 0; i < MAX_DIR_ENTRIES; i++)
 				{
-					inode_table[inumber].data.fileContents = NULL;
+					inode_table[inumber].data.dirEntries[i].inumber = FREE_INODE;
 				}
-				inodeUnlock(inumber);
-				return inumber;
+			}
+			else
+			{
+				inode_table[inumber].data.fileContents = NULL;
 			}
 			inodeUnlock(inumber);
+			return inumber;
 		}
+		inodeUnlock(inumber);
 	}
 
 	return FAIL;
