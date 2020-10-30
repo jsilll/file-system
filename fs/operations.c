@@ -42,6 +42,7 @@ void split_parent_child_from_path(char *path, char **parent, char **child)
 	*child = path + last_slash_location + 1;
 }
 
+
 /*
  * Initializes tecnicofs and creates root node.
  */
@@ -50,7 +51,7 @@ void init_fs()
 	inode_table_init();
 
 	/* create root inode */
-	int root = inode_create(T_DIRECTORY);
+	int root = inode_create(T_DIRECTORY, -1);
 
 	if (root != FS_ROOT)
 	{
@@ -143,6 +144,7 @@ int create(char *name, type nodeType)
 	}
 
 	inodeLock('w', parent_inumber);
+	printf("MADJE:Lock Criar node\n");
 	inode_get(parent_inumber, &pType, &pdata);
 
 	if (pType != T_DIRECTORY)
@@ -162,12 +164,13 @@ int create(char *name, type nodeType)
 	}
 
 	/* create node and add entry to folder that contains new node */
-	child_inumber = inode_create(nodeType);
+	child_inumber = inode_create(nodeType, parent_inumber);
 
 	if (child_inumber == FAIL)
 	{
 		printf("failed to create %s in  %s, couldn't allocate inode\n",
 			   child_name, parent_name);
+		printf("MADJE:Unlock Criar node\n");
 		inodeUnlock(parent_inumber);
 		return FAIL;
 	}
@@ -176,9 +179,11 @@ int create(char *name, type nodeType)
 	{
 		printf("could not add entry %s in dir %s\n",
 			   child_name, parent_name);
+		printf("MADJE:Unlock Criar node\n");	
 		inodeUnlock(parent_inumber);
 		return FAIL;
 	}
+	printf("MADJE:Unlock Criar node\n");
 	inodeUnlock(parent_inumber);
 	return SUCCESS;
 }
@@ -212,25 +217,33 @@ int delete (char *name)
 
 	/* lockar aqui*/
 	inodeLock('w', parent_inumber);
+	printf("MADJE:Lock parent node\n");
 	inode_get(parent_inumber, &pType, &pdata);
 
 	if (pType != T_DIRECTORY)
 	{
 		printf("failed to delete %s, parent %s is not a dir\n",
 			   child_name, parent_name);
+		
+		printf("MADJE:Unlock parent node\n");
 		inodeUnlock(parent_inumber);
 		return FAIL;
 	}
 
 	child_inumber = lookup_sub_node(child_name, pdata.dirEntries);
 	inodeLock('w', child_inumber);
+	printf("MADJE:Lock child node\n");
 
 	if (child_inumber == FAIL)
 	{
 		printf("could not delete %s, does not exist in dir %s\n",
 			   name, parent_name);
 		inodeUnlock(parent_inumber);
+
+		printf("MADJE:unlock parent node\n");	
 		inodeUnlock(child_inumber);
+		printf("MADJE:unlock child node\n");
+
 		return FAIL;
 	}
 
@@ -241,7 +254,9 @@ int delete (char *name)
 		printf("could not delete %s: is a directory and not empty\n",
 			   name);
 		inodeUnlock(parent_inumber);
+		printf("MADJE:unlock parent node\n");
 		inodeUnlock(child_inumber);
+		printf("MADJE:unlock child node\n");
 		return FAIL;
 	}
 
@@ -251,7 +266,9 @@ int delete (char *name)
 		printf("failed to delete %s from dir %s\n",
 			   child_name, parent_name);
 		inodeUnlock(parent_inumber);
+		printf("MADJE:unlock parent node\n");
 		inodeUnlock(child_inumber);
+		printf("MADJE:unlock child node\n");
 		return FAIL;
 	}
 
@@ -260,12 +277,16 @@ int delete (char *name)
 		printf("could not delete inode number %d from dir %s\n",
 			   child_inumber, parent_name);
 		inodeUnlock(parent_inumber);
+		printf("MADJE:unlock parent node\n");
 		inodeUnlock(child_inumber);
+		printf("MADJE:unlock child node\n");
 		return FAIL;
 	}
 
 	inodeUnlock(parent_inumber);
+	printf("MADJE:unlock parent node\n");
 	inodeUnlock(child_inumber);
+	printf("MADJE:unlock child node\n");
 	return SUCCESS;
 }
 
@@ -295,6 +316,7 @@ int lookup(char *name)
 
 	/* Critical Zone */
 	inodeLock('r', current_inumber); /* Locking the root folder */
+	printf("MADJE:lock root node in lookup\n");
 	locked[locked_ammount++] = current_inumber;
 
 	/* get root inode data */
@@ -305,13 +327,17 @@ int lookup(char *name)
 	while (path != NULL && (current_inumber = lookup_sub_node(path, data.dirEntries)) != FAIL)
 	{
 		inodeLock('r', current_inumber); /*  Locking all the folders / files along the path */
+		printf("MADJE: lock all child nodes in lookup %d\n",current_inumber);
 		locked[locked_ammount++] = current_inumber;
 		inode_get(current_inumber, &nType, &data);
 		path = strtok_r(NULL, delim, &saveptr);
 	}
 
-	for (int i = 0; i < locked_ammount; i++)
+	for (int i = 0; i < locked_ammount; i++) {
+
+		printf("MADJE: unlock all child nodes in lookup %d\n",current_inumber);
 		inodeUnlock(locked[i]);
+	}
 
 	return current_inumber;
 }

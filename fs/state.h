@@ -56,7 +56,7 @@ void inode_table_init();
 
 void inode_table_destroy();
 
-int inode_create(type nType);
+int inode_create(type nType, int parent_inumber);
 
 int inode_delete(int inumber);
 
