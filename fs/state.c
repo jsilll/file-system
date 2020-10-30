@@ -9,19 +9,19 @@
 
 inode_t inode_table[INODE_TABLE_SIZE];
 
+/*
+ * Unlocks an inode
+ */
 void inodeLock(char lockmethod, int inumber)
 {
-
 	switch (lockmethod)
 	{
 	case 'r':
-		printf("Locking inumber %d in mode %c\n", inumber, lockmethod);
 		if (pthread_rwlock_rdlock(&inode_table[inumber].lock) != 0)
 			exit(EXIT_FAILURE);
 		break;
 
 	case 'w':
-		printf("Locking inumber %d in mode %c\n", inumber, lockmethod);
 		if (pthread_rwlock_wrlock(&inode_table[inumber].lock) != 0)
 			exit(EXIT_FAILURE);
 		break;
@@ -32,9 +32,11 @@ void inodeLock(char lockmethod, int inumber)
 	}
 }
 
+/*
+ * Locks an inode
+ */
 void inodeUnlock(int inumber)
 {
-	printf("Unlocking inumber %d\n", inumber);
 	if (pthread_rwlock_unlock(&inode_table[inumber].lock) != 0)
 		exit(EXIT_FAILURE);
 }
@@ -125,7 +127,6 @@ int inode_create(type nType, int parent_inumber)
 		}
 		inodeUnlock(inumber);
 	}
-
 	return FAIL;
 }
 
