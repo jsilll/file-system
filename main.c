@@ -75,16 +75,7 @@ int fcloseSafe(FILE *file)
 	return 0;
 }
 
-// int getNextSlot()
-// {
-// 	int index = bufferTail;
-// 	while (inputCommands[(index++) % MAX_COMMANDS][0] != DELETED_COMMAND)
-// 	{
-// 	}
-// 	return index;
-// }
-
-void insertCommand(char *data)
+void syncdInsertCommand(char *data)
 {
 	while (count == MAX_COMMANDS)
 		pthread_cond_wait(&podeProduzir, &commandsMutex);
@@ -98,13 +89,33 @@ void insertCommand(char *data)
 	pthread_cond_signal(&podeConsumir);
 }
 
-char *removeCommand()
+void syncdRemoveCommand(char *token, char *name, char *type, int *numTokens)
 {
-	char *res = inputCommands[consptr++];
+	commandsLock();
+
+	/* Waiting for a command to process */
+	while (count == 0 && !endoffile)
+		pthread_cond_wait(&podeConsumir, &commandsMutex);
+
+	/* In case there's no more commands to process */
+	if (count == 0 && endoffile)
+	{
+		/* Signal other sleeping threads */
+		pthread_cond_signal(&podeConsumir);
+		commandsUnlock();
+		return;
+	}
+
+	/* Copying the command to the local variables */
+	*numTokens = sscanf(inputCommands[consptr++], "%c %s %c", token, name, type);
+
+	/* Circular Buffer implementation */
 	if (consptr == MAX_COMMANDS)
 		consptr = 0;
 	count--;
-	return res;
+
+	pthread_cond_signal(&podeProduzir);
+	commandsUnlock();
 }
 
 void errorParse()
@@ -113,10 +124,11 @@ void errorParse()
 	exit(EXIT_FAILURE);
 }
 
-void *commandsProvider(void *commands_file) //Produtor
+void *providerThread(void *commands_file)
 {
 	char line[MAX_INPUT_SIZE];
 	int n = sizeof(line) / sizeof(char);
+
 	/* break loop with ^Z or ^D */
 	while (fgets(line, n, (FILE *)commands_file))
 	{
@@ -133,17 +145,17 @@ void *commandsProvider(void *commands_file) //Produtor
 		case 'c':
 			if (numTokens != 3)
 				errorParse();
-			insertCommand(line);
+			syncdInsertCommand(line);
 			break;
 		case 'l':
 			if (numTokens != 2)
 				errorParse();
-			insertCommand(line);
+			syncdInsertCommand(line);
 			break;
 		case 'd':
 			if (numTokens != 2)
 				errorParse();
-			insertCommand(line);
+			syncdInsertCommand(line);
 			break;
 		case '#':
 			break;
@@ -151,32 +163,22 @@ void *commandsProvider(void *commands_file) //Produtor
 			errorParse();
 		}
 	}
+	endoffile = 1;
 	pthread_cond_signal(&podeConsumir);
 	return NULL;
 }
 
-void *queueWorker()
+void *consumerThread()
 {
 	while (1)
 	{
-		commandsLock();
-		while (count == 0 && !endoffile)
-			pthread_cond_wait(&podeConsumir, &commandsMutex);
-
-		if (count == 0 && endoffile)
-		{
-			pthread_cond_signal(&podeConsumir);
-			commandsUnlock();
-			return;
-		}
-
-		const char *command = removeCommand();
+		int numTokens;
 		char token, type;
 		char name[MAX_INPUT_SIZE];
-		int numTokens = sscanf(command, "%c %s %c", &token, name, &type);
+		syncdRemoveCommand(&token, name, &type, &numTokens);
 
-		pthread_cond_signal(&podeProduzir);
-		commandsUnlock();
+		if (numTokens == -1)
+			return NULL;
 
 		if (numTokens < 2)
 		{
@@ -228,20 +230,30 @@ void executeThreads(char *threads_count_char, FILE *commands_file)
 	int threads_count = atoi(threads_count_char);
 	pthread_t command_thread, worker_tid[threads_count];
 
-	/* Creating command thread */
-	if (pthread_create(&command_thread, NULL, commandsProvider, (void *)commands_file) != 0)
-		fprintf(stderr, "Failed to commands thread.\n");
-
-	/* Creating the consumer threads */
-	for (i = 0; i < threads_count; i++)
+	/* Creating provider thread */
+	if (pthread_create(&command_thread, NULL, providerThread, (void *)commands_file) != 0)
 	{
-		if (pthread_create(&worker_tid[i], NULL, queueWorker, NULL) != 0)
-			fprintf(stderr, "Failed to create thread %d.\n", i);
+		fprintf(stderr, "Failed to create provider thread.\n");
+		exit(EXIT_FAILURE);
 	}
 
-	if (pthread_join(command_thread, (void **)&result) != 0)
-		printf("Error while joining thread.\n");
+	/* Creating all the consumer threads */
+	for (i = 0; i < threads_count; i++)
+	{
+		if (pthread_create(&worker_tid[i], NULL, consumerThread, NULL) != 0)
+		{
+			fprintf(stderr, "Failed to create a thread %d.\n", i);
+			exit(EXIT_FAILURE);
+		}
+	}
 
+	/* Waiting for the provider thread */
+	if (pthread_join(command_thread, (void **)&result) != 0)
+	{
+		printf("Error while joining thread.\n");
+	}
+
+	/* Waiting for all the consumer threads */
 	for (i = 0; i < threads_count; i++)
 	{
 		if (pthread_join(worker_tid[i], (void **)&result) != 0)
