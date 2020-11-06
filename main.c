@@ -77,6 +77,7 @@ int fcloseSafe(FILE *file)
 
 void syncdInsertCommand(char *data)
 {
+	commandsLock();
 	while (count == MAX_COMMANDS)
 		pthread_cond_wait(&podeProduzir, &commandsMutex);
 
@@ -85,14 +86,13 @@ void syncdInsertCommand(char *data)
 	if (prodptr == MAX_COMMANDS)
 		prodptr = 0;
 	count++;
-
 	pthread_cond_signal(&podeConsumir);
+	commandsUnlock();
 }
 
-void syncdRemoveCommand(char *token, char *name, char *type, int *numTokens)
+int syncdRemoveCommand(char *token, char *name, char *type, int *numTokens)
 {
 	commandsLock();
-
 	/* Waiting for a command to process */
 	while (count == 0 && !endoffile)
 		pthread_cond_wait(&podeConsumir, &commandsMutex);
@@ -101,9 +101,8 @@ void syncdRemoveCommand(char *token, char *name, char *type, int *numTokens)
 	if (count == 0 && endoffile)
 	{
 		/* Signal other sleeping threads */
-		pthread_cond_signal(&podeConsumir);
 		commandsUnlock();
-		return;
+		return -1;
 	}
 
 	/* Copying the command to the local variables */
@@ -116,6 +115,7 @@ void syncdRemoveCommand(char *token, char *name, char *type, int *numTokens)
 
 	pthread_cond_signal(&podeProduzir);
 	commandsUnlock();
+	return 0;
 }
 
 void errorParse()
@@ -163,8 +163,12 @@ void *providerThread(void *commands_file)
 			errorParse();
 		}
 	}
+
+	commandsLock();
 	endoffile = 1;
-	pthread_cond_signal(&podeConsumir);
+	pthread_cond_broadcast(&podeConsumir);
+	commandsUnlock();
+
 	return NULL;
 }
 
@@ -175,9 +179,8 @@ void *consumerThread()
 		int numTokens;
 		char token, type;
 		char name[MAX_INPUT_SIZE];
-		syncdRemoveCommand(&token, name, &type, &numTokens);
 
-		if (numTokens == -1)
+		if (syncdRemoveCommand(&token, name, &type, &numTokens) == -1)
 			return NULL;
 
 		if (numTokens < 2)
