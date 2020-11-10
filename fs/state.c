@@ -14,7 +14,6 @@ inode_t inode_table[INODE_TABLE_SIZE];
  */
 void inodeLock(char lockmethod, int inumber)
 {
-	printf("locking %d in %c\n", inumber, lockmethod);
 	switch (lockmethod)
 	{
 	case 'r':
@@ -38,7 +37,6 @@ void inodeLock(char lockmethod, int inumber)
  */
 void inodeUnlock(int inumber)
 {
-	printf("unlocking %d\n", inumber);
 	if (pthread_rwlock_unlock(&inode_table[inumber].lock) != 0)
 		exit(EXIT_FAILURE);
 }
@@ -106,7 +104,6 @@ int inode_create(type nType, int parent_inumber)
 		/* If the inode is being used by other thread, we skip it */
 		if (pthread_rwlock_trywrlock(&inode_table[inumber].lock) != 0)
 			continue;
-		printf("locking %d in w\n", inumber);
 		if (inode_table[inumber].nodeType == T_NONE)
 		{
 			inode_table[inumber].nodeType = nType;
