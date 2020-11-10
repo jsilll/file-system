@@ -90,7 +90,7 @@ void syncdInsertCommand(char *data)
 	commandsUnlock();
 }
 
-int syncdRemoveCommand(char *token, char *name, char *type, int *numTokens)
+int syncdRemoveCommand(char *command)
 {
 	commandsLock();
 	/* Waiting for a command to process */
@@ -100,15 +100,14 @@ int syncdRemoveCommand(char *token, char *name, char *type, int *numTokens)
 	/* In case there's no more commands to process */
 	if (count == 0 && endoffile)
 	{
-		/* Signal other sleeping threads */
 		commandsUnlock();
 		return -1;
 	}
 
-	/* Copying the command to the local variables */
-	*numTokens = sscanf(inputCommands[consptr++], "%c %s %c", token, name, type);
+	/* Copying the command to the local variable */
+	strcpy(command, inputCommands[consptr++]);
 
-	/* Circular Buffer implementation */
+	/* Circular Buffer */
 	if (consptr == MAX_COMMANDS)
 		consptr = 0;
 	count--;
@@ -157,6 +156,10 @@ void *providerThread(void *commands_file)
 				errorParse();
 			syncdInsertCommand(line);
 			break;
+		case 'm':
+			if (numTokens != 3)
+				errorParse();
+			syncdInsertCommand(line);
 		case '#':
 			break;
 		default:
@@ -176,14 +179,20 @@ void *consumerThread()
 {
 	while (1)
 	{
-		int numTokens;
-		char token, type;
-		char name[MAX_INPUT_SIZE];
+		int numArgs;
+		char token;
+		char command[MAX_INPUT_SIZE];
+		char arg2[MAX_INPUT_SIZE];
+		char arg3[MAX_INPUT_SIZE];
 
-		if (syncdRemoveCommand(&token, name, &type, &numTokens) == -1)
+		if (syncdRemoveCommand(command) == -1)
 			return NULL;
 
-		if (numTokens < 2)
+		/* Splitting commands arguments */
+		numArgs = sscanf(command, "%c %s %s", &token, arg2, arg3);
+
+		/* Parsing the command */
+		if (numArgs < 2)
 		{
 			fprintf(stderr, "Error: invalid command in Queue\n");
 			exit(EXIT_FAILURE);
@@ -192,31 +201,35 @@ void *consumerThread()
 		switch (token)
 		{
 		case 'c':
-			switch (type)
+			switch (arg3[0])
 			{
 			case 'f':
-				printf("Create file: %s\n", name);
-				create(name, T_FILE);
+				printf("Create file: %s\n", arg2);
+				create(arg2, T_FILE);
 				break;
 			case 'd':
-				printf("Create directory: %s\n", name);
-				create(name, T_DIRECTORY);
+				printf("Create directory: %s\n", arg2);
+				create(arg2, T_DIRECTORY);
 				break;
 			default:
 				fprintf(stderr, "Error: invalid node type\n");
 				exit(EXIT_FAILURE);
 			}
 			break;
+		case 'm':
+			printf("Move file: %s to %s\n", arg2, arg3);
+			move(arg2, arg3);
+			break;
 		case 'l':
-			searchResult = lookup(name);
+			searchResult = lookup(arg2);
 			if (searchResult >= 0)
-				printf("Search: %s found\n", name);
+				printf("Search: %s found\n", arg2);
 			else
-				printf("Search: %s not found\n", name);
+				printf("Search: %s not found\n", arg2);
 			break;
 		case 'd':
-			printf("Delete: %s\n", name);
-			delete (name);
+			printf("Delete: %s\n", arg2);
+			delete (arg2);
 			break;
 		default:
 		{

@@ -68,6 +68,8 @@ int dir_reset_entry(int inumber, int sub_inumber);
 
 int dir_add_entry(int inumber, int sub_inumber, char *sub_name);
 
+int dir_remove_entry(int inumber, int sub_inumber);
+
 void inode_print_tree(FILE *fp, int inumber, char *name);
 
 #endif /* INODES_H */

@@ -14,6 +14,7 @@ inode_t inode_table[INODE_TABLE_SIZE];
  */
 void inodeLock(char lockmethod, int inumber)
 {
+	printf("locking %d in %c\n", inumber, lockmethod);
 	switch (lockmethod)
 	{
 	case 'r':
@@ -37,6 +38,7 @@ void inodeLock(char lockmethod, int inumber)
  */
 void inodeUnlock(int inumber)
 {
+	printf("unlocking %d\n", inumber);
 	if (pthread_rwlock_unlock(&inode_table[inumber].lock) != 0)
 		exit(EXIT_FAILURE);
 }
@@ -104,7 +106,7 @@ int inode_create(type nType, int parent_inumber)
 		/* If the inode is being used by other thread, we skip it */
 		if (pthread_rwlock_trywrlock(&inode_table[inumber].lock) != 0)
 			continue;
-
+		printf("locking %d in w\n", inumber);
 		if (inode_table[inumber].nodeType == T_NONE)
 		{
 			inode_table[inumber].nodeType = nType;
@@ -273,6 +275,50 @@ int dir_add_entry(int inumber, int sub_inumber, char *sub_name)
 		{
 			inode_table[inumber].data.dirEntries[i].inumber = sub_inumber;
 			strcpy(inode_table[inumber].data.dirEntries[i].name, sub_name);
+			return SUCCESS;
+		}
+	}
+	return FAIL;
+}
+
+/*
+ * Removes an entry to the i-node directory data.
+ * Input:
+ *  - inumber: identifier of the i-node
+ *  - sub_inumber: identifier of the sub i-node entry
+ *  - sub_name: name of the sub i-node entry 
+ * Returns: SUCCESS or FAIL
+ */
+int dir_remove_entry(int inumber, int sub_inumber)
+{
+	/* Used for testing synchronization speedup */
+	insert_delay(DELAY);
+
+	/*Critical Zone Beggining*/
+	if ((inumber < 0) || (inumber > INODE_TABLE_SIZE) || (inode_table[inumber].nodeType == T_NONE))
+	{
+		printf("inode_remove_entry: invalid inumber\n");
+		return FAIL;
+	}
+
+	if (inode_table[inumber].nodeType != T_DIRECTORY)
+	{
+		printf("inode_remove_entry: can only remove entry to directories\n");
+		return FAIL;
+	}
+
+	if ((sub_inumber < 0) || (sub_inumber > INODE_TABLE_SIZE) || (inode_table[sub_inumber].nodeType == T_NONE))
+	{
+		printf("inode_remove_entry: invalid entry inumber\n");
+		return FAIL;
+	}
+
+	for (int i = 0; i < MAX_DIR_ENTRIES; i++)
+	{
+		if (inode_table[inumber].data.dirEntries[i].inumber == sub_inumber)
+		{
+			inode_table[inumber].data.dirEntries[i].inumber = FREE_INODE;
+			inode_table[inumber].data.dirEntries[i].name[0] = '\0';
 			return SUCCESS;
 		}
 	}

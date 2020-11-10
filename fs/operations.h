@@ -13,9 +13,10 @@ int create(char *name, type nodeType);
 
 int delete (char *name);
 
+int move(char *src, char *dest);
+
 int lookup(char *name);
 
 void print_tecnicofs_tree(FILE *fp);
 
 #endif /* FS_H */
-

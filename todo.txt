@@ -1,3 +1,0 @@
-- Adicionar Suporte para rwlock no main.c <-
-- Adicionar Suporte para rwlock no state.c
-- Adicionar Lock do fs ao nivel do operations.c nas funcoes is_dir_empty() e lookup_sub_node()

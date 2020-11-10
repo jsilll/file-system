@@ -210,7 +210,6 @@ int delete (char *name)
 		return FAIL;
 	}
 
-	/* lockar aqui*/
 	inodeLock('w', parent_inumber);
 	inode_get(parent_inumber, &pType, &pdata);
 
@@ -230,7 +229,6 @@ int delete (char *name)
 		printf("could not delete %s, does not exist in dir %s\n",
 			   name, parent_name);
 		inodeUnlock(parent_inumber);
-		inodeUnlock(child_inumber);
 		return FAIL;
 	}
 
@@ -267,6 +265,59 @@ int delete (char *name)
 
 	inodeUnlock(parent_inumber);
 	inodeUnlock(child_inumber);
+	return SUCCESS;
+}
+
+int move(char *src, char *dest)
+{
+	char *sparent_name, *schild_name, *dparent_name, *dchild_name;
+	int sparent_inumber, dparent_inumber, moved_inode;
+	type sType, dType;
+	union Data sdata, ddata;
+
+	split_parent_child_from_path(dest, &dparent_name, &dchild_name);
+	split_parent_child_from_path(src, &sparent_name, &schild_name);
+
+	dparent_inumber = lookup(dparent_name);
+
+	// Verify that dest folder exists but actual file / folder doesnt exist
+	if (dparent_inumber < 0)
+		return FAIL;
+
+	inodeLock('w', dparent_inumber);
+	inode_get(dparent_inumber, &dType, &ddata);
+	if (dType != T_DIRECTORY || lookup_sub_node(dchild_name, ddata.dirEntries) != FAIL)
+	{
+		inodeUnlock(dparent_inumber);
+		return FAIL;
+	}
+
+	// Verify src actually exists
+	sparent_inumber = lookup(sparent_name);
+
+	if (sparent_inumber < 0)
+	{
+		inodeUnlock(dparent_inumber);
+		return FAIL;
+	}
+
+	inodeLock('w', sparent_inumber);
+	inode_get(sparent_inumber, &sType, &sdata);
+	moved_inode = lookup_sub_node(schild_name, sdata.dirEntries);
+	if (sType != T_DIRECTORY || moved_inode == FAIL)
+	{
+		inodeUnlock(dparent_inumber);
+		inodeUnlock(sparent_inumber);
+		return FAIL;
+	}
+
+	// Remove dirEntry from source
+	dir_remove_entry(sparent_inumber, moved_inode);
+	// Add dirEntry to dest
+	dir_add_entry(dparent_inumber, moved_inode, dchild_name);
+
+	inodeUnlock(dparent_inumber);
+	inodeUnlock(sparent_inumber);
 	return SUCCESS;
 }
 
