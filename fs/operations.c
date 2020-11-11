@@ -268,6 +268,13 @@ int delete (char *name)
 	return SUCCESS;
 }
 
+/*
+ * Moves a node from a given to another one.
+ * Input:
+ *  - src: path of the node
+ *  - dest: destination of the node
+ * Returns: SUCCESS or FAIL
+ */
 int move(char *src, char *dest)
 {
 	char *sparent_name, *schild_name, *dparent_name, *dchild_name;
@@ -278,30 +285,39 @@ int move(char *src, char *dest)
 	split_parent_child_from_path(dest, &dparent_name, &dchild_name);
 	split_parent_child_from_path(src, &sparent_name, &schild_name);
 
+	sparent_inumber = lookup(sparent_name);
 	dparent_inumber = lookup(dparent_name);
 
-	// Verify that dest folder exists but actual file / folder doesnt exist
+	// Verify src actually exists
+	if (sparent_inumber < 0)
+		return FAIL;
+
+	// Verify that dest folder
 	if (dparent_inumber < 0)
 		return FAIL;
 
-	inodeLock('w', dparent_inumber);
+	// Establishing a locking order for the deadlocks
+	if (sparent_inumber > dparent_inumber)
+	{
+		inodeLock('w', sparent_inumber);
+		inodeLock('w', dparent_inumber);
+	}
+	else
+	{
+		inodeLock('w', dparent_inumber);
+		inodeLock('w', sparent_inumber);
+	}
+
+	// Veryfing dest is a folder and doenst contain another file with the same name
 	inode_get(dparent_inumber, &dType, &ddata);
 	if (dType != T_DIRECTORY || lookup_sub_node(dchild_name, ddata.dirEntries) != FAIL)
 	{
 		inodeUnlock(dparent_inumber);
+		inodeUnlock(sparent_inumber);
 		return FAIL;
 	}
 
-	// Verify src actually exists
-	sparent_inumber = lookup(sparent_name);
-
-	if (sparent_inumber < 0)
-	{
-		inodeUnlock(dparent_inumber);
-		return FAIL;
-	}
-
-	inodeLock('w', sparent_inumber);
+	// Veryfing the file we want to move exists isnt a folder
 	inode_get(sparent_inumber, &sType, &sdata);
 	moved_inode = lookup_sub_node(schild_name, sdata.dirEntries);
 	if (sType != T_DIRECTORY || moved_inode == FAIL)
@@ -313,11 +329,13 @@ int move(char *src, char *dest)
 
 	// Remove dirEntry from source
 	dir_remove_entry(sparent_inumber, moved_inode);
+
 	// Add dirEntry to dest
 	dir_add_entry(dparent_inumber, moved_inode, dchild_name);
 
 	inodeUnlock(dparent_inumber);
 	inodeUnlock(sparent_inumber);
+
 	return SUCCESS;
 }
 
