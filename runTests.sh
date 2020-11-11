@@ -20,7 +20,7 @@ fi
 if [ ! -d ${OUTPUTDIR%/} ]
 then
     echo "Diretoria de output inexistente."
-    return 1;
+    exit 1;
 fi
 
 for x in ${INPUTDIR%/}/*.txt; 
