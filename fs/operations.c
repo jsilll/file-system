@@ -293,43 +293,29 @@ int move(char *src, char *dest)
 	sparent_inumber = lookup(sparent_name);
 	dparent_inumber = lookup(dparent_name);
 
-	/* In case we want to move inside a direcotry (rename) */
-	if (sparent_inumber == dparent_inumber)
-	{
-		sparent_inumber = aux_lookup(sparent_name, slocked, &sindex);
-
-		// Veryfing the file we want to move exists isnt a folder
-		inode_get(sparent_inumber, &sType, &sdata);
-		moved_inode = lookup_sub_node(schild_name, sdata.dirEntries);
-		if (sType != T_DIRECTORY || moved_inode == FAIL)
-		{
-			unlockAll(slocked, sindex);
-			return FAIL;
-		}
-		// Remove dirEntry from source
-		dir_remove_entry(sparent_inumber, moved_inode);
-		// Add dirEntry to dest
-		dir_add_entry(sparent_inumber, moved_inode, dchild_name);
-		return SUCCESS;
-	}
-
 	// Establishing a locking order for the deadlocks
 	if (sparent_inumber > dparent_inumber)
 	{
 		sparent_inumber = aux_lookup(sparent_name, slocked, &sindex);
 		dparent_inumber = aux_lookup(dparent_name, dlocked, &dindex);
 	}
-	else
+	else if (sparent_inumber < dparent_inumber)
 	{
 		dparent_inumber = aux_lookup(dparent_name, dlocked, &dindex);
+		sparent_inumber = aux_lookup(sparent_name, slocked, &sindex);
+	}
+	else
+	{
+		/* The case we move inside a folder (file rename) */
 		sparent_inumber = aux_lookup(sparent_name, slocked, &sindex);
 	}
 
 	// Verify src and dest actually exists
 	if (sparent_inumber < 0 || dparent_inumber < 0)
 	{
-		unlockAll(dlocked, dindex);
 		unlockAll(slocked, sindex);
+		if (dparent_inumber != sparent_inumber)
+			unlockAll(dlocked, dindex);
 		return FAIL;
 	}
 
@@ -337,8 +323,9 @@ int move(char *src, char *dest)
 	inode_get(dparent_inumber, &dType, &ddata);
 	if (dType != T_DIRECTORY || lookup_sub_node(dchild_name, ddata.dirEntries) != FAIL)
 	{
-		unlockAll(dlocked, dindex);
 		unlockAll(slocked, sindex);
+		if (dparent_inumber != sparent_inumber)
+			unlockAll(dlocked, dindex);
 		return FAIL;
 	}
 
@@ -347,8 +334,9 @@ int move(char *src, char *dest)
 	moved_inode = lookup_sub_node(schild_name, sdata.dirEntries);
 	if (sType != T_DIRECTORY || moved_inode == FAIL)
 	{
-		unlockAll(dlocked, dindex);
 		unlockAll(slocked, sindex);
+		if (dparent_inumber != sparent_inumber)
+			unlockAll(dlocked, dindex);
 		return FAIL;
 	}
 
@@ -358,8 +346,9 @@ int move(char *src, char *dest)
 	// Add dirEntry to dest
 	dir_add_entry(dparent_inumber, moved_inode, dchild_name);
 
-	unlockAll(dlocked, dindex);
 	unlockAll(slocked, sindex);
+	if (dparent_inumber != sparent_inumber)
+		unlockAll(dlocked, dindex);
 
 	return SUCCESS;
 }
