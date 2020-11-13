@@ -17,6 +17,8 @@ int move(char *src, char *dest);
 
 int lookup(char *name);
 
+int aux_lookup(char *name, int *locked, int *index);
+
 void print_tecnicofs_tree(FILE *fp);
 
 #endif /* FS_H */

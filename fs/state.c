@@ -42,6 +42,15 @@ void inodeUnlock(int inumber)
 }
 
 /*
+ * Locks all inodes in an array, from last (index - 1) to the first (0) (reverse order of locking)
+ */
+void unlockAll(int *locked, int index)
+{
+	for (int i = index - 1; i >= 0; i--)
+		inodeUnlock(locked[i]);
+}
+
+/*
  * Sleeps for synchronization testing.
  */
 void insert_delay(int cycles)

@@ -50,6 +50,8 @@ void inodeLock(char lockmethod, int inumber);
 
 void inodeUnlock(int inumber);
 
+void unlockAll(int *locked, int index);
+
 void insert_delay(int cycles);
 
 void inode_table_init();
