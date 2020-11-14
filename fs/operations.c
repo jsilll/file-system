@@ -9,6 +9,7 @@
  *  - path: the path to split. ATENTION: the function may alter this parameter
  *  - parent: reference to a char*, to store parent path
  *  - child: reference to a char*, to store child file name
+ * Returns : number of slashes in the path used for getting path's depth
  */
 int split_parent_child_from_path(char *path, char **parent, char **child)
 {
@@ -406,6 +407,16 @@ int lookup(char *name)
 	return current_inumber;
 }
 
+/*
+ * Searches for a number in a array
+ * Input:
+ *  - array: array of numbers
+ *  - length: max index to look for 
+ *  - el: number to look for
+ * Returns:
+ *  SUCESS : found the number in the array
+ *  FAIL: otherwise
+ */
 int linear_search(int *array, int length, int el)
 {
 	for (int i = 0; i < length; i++)

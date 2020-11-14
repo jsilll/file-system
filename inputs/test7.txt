@@ -1,3 +1,6 @@
 #testing move within the same directory
-c a f
-m a b
+c a d
+c /y f
+c /a/z f
+m /y /a/y
+m /a/z /z
