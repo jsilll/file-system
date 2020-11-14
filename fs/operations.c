@@ -295,18 +295,36 @@ int move(char *src, char *dest)
 		return FAIL;
 
 	/* Establishing an order for locking, the shallowest inode first */
-	if (sdepth <= ddepth)
+	if (sdepth < ddepth)
 	{
 		sparent_inumber = aux_lookup(sparent_name, slocked, &sindex, NULL, 0);
 		dparent_inumber = aux_lookup(dparent_name, dlocked, &dindex, slocked, sindex);
 	}
-	else
+	else if (sdepth > ddepth)
 	{
 		dparent_inumber = aux_lookup(dparent_name, dlocked, &dindex, NULL, 0);
 		sparent_inumber = aux_lookup(sparent_name, slocked, &sindex, dlocked, dindex);
 	}
+	else
+	{
+		/* If both paths have the same depth, use supposed inumbers */
+		sparent_inumber = lookup(sparent_name);
+		dparent_inumber = lookup(dparent_name);
 
-	// Verifying src and dest parent actually exist
+		/* First case, also handles moving within the same directory (when the inumbers are the same) */
+		if (sparent_inumber >= dparent_inumber)
+		{
+			sparent_inumber = aux_lookup(sparent_name, slocked, &sindex, NULL, 0);
+			dparent_inumber = aux_lookup(dparent_name, dlocked, &dindex, slocked, sindex);
+		}
+		else
+		{
+			dparent_inumber = aux_lookup(dparent_name, dlocked, &dindex, NULL, 0);
+			sparent_inumber = aux_lookup(sparent_name, slocked, &sindex, dlocked, dindex);
+		}
+	}
+
+	// Now that we locked everything, verifying src and dest parent actually exist
 	if (sparent_inumber < 0 || dparent_inumber < 0)
 	{
 		unlockAll(slocked, sindex);
@@ -323,7 +341,7 @@ int move(char *src, char *dest)
 		return FAIL;
 	}
 
-	// Veryfying the inode (either file or dir) we want to move exists
+	// Veryfying the inode we want to move exists
 	inode_get(sparent_inumber, &sType, &sdata);
 	moved_inumber = lookup_sub_node(schild_name, sdata.dirEntries);
 	if (sType != T_DIRECTORY || moved_inumber == FAIL)
@@ -334,10 +352,7 @@ int move(char *src, char *dest)
 	}
 
 	/* Actual move operation happens here */
-
-	// Remove dirEntry from source
 	dir_remove_entry(sparent_inumber, moved_inumber);
-	// Add dirEntry to dest
 	dir_add_entry(dparent_inumber, moved_inumber, dchild_name);
 
 	unlockAll(slocked, sindex);
@@ -424,6 +439,7 @@ int aux_lookup(char *name, int *locked, int *index, int *already_locked, int alr
 	type nType;
 	union Data data;
 
+	/* First iteration outside the loop, for the root folder */
 	char *path = strtok_r(full_path, delim, &saveptr);
 	if (already_locked_index == 0 || linear_search(already_locked, already_locked_index, current_inumber) == FAIL)
 	{
