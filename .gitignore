@@ -55,5 +55,6 @@ tecnicofs
 
 # Custom Ignores
 .out
-.vscode
+.vscode/
 out/
+outputs/

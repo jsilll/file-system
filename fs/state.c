@@ -46,8 +46,8 @@ void inodeUnlock(int inumber)
  */
 void unlockAll(int *locked, int index)
 {
-	for (int i = index - 1; i >= 0; i--)
-		inodeUnlock(locked[i]);
+	for (--index; index >= 0; index--)
+		inodeUnlock(locked[index]);
 }
 
 /*
@@ -122,14 +122,10 @@ int inode_create(type nType, int parent_inumber)
 				inode_table[inumber].data.dirEntries = malloc(sizeof(DirEntry) * MAX_DIR_ENTRIES);
 
 				for (int i = 0; i < MAX_DIR_ENTRIES; i++)
-				{
 					inode_table[inumber].data.dirEntries[i].inumber = FREE_INODE;
-				}
 			}
 			else
-			{
 				inode_table[inumber].data.fileContents = NULL;
-			}
 			inodeUnlock(inumber);
 			return inumber;
 		}

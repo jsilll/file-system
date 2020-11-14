@@ -10,7 +10,7 @@
  *  - parent: reference to a char*, to store parent path
  *  - child: reference to a char*, to store child file name
  */
-void split_parent_child_from_path(char *path, char **parent, char **child)
+int split_parent_child_from_path(char *path, char **parent, char **child)
 {
 	int n_slashes = 0, last_slash_location = 0;
 	int len = strlen(path);
@@ -34,12 +34,13 @@ void split_parent_child_from_path(char *path, char **parent, char **child)
 	{ // root directory
 		*parent = "";
 		*child = path;
-		return;
+		return n_slashes;
 	}
 
 	path[last_slash_location] = '\0';
 	*parent = path;
 	*child = path + last_slash_location + 1;
+	return n_slashes;
 }
 
 /*
@@ -133,7 +134,7 @@ int create(char *name, type nodeType)
 	strcpy(name_copy, name);
 	split_parent_child_from_path(name_copy, &parent_name, &child_name);
 
-	parent_inumber = aux_lookup(parent_name, locked, &locked_index);
+	parent_inumber = aux_lookup(parent_name, locked, &locked_index, NULL, 0);
 
 	if (parent_inumber == FAIL)
 	{
@@ -202,7 +203,7 @@ int delete (char *name)
 	strcpy(name_copy, name);
 	split_parent_child_from_path(name_copy, &parent_name, &child_name);
 
-	parent_inumber = aux_lookup(parent_name, locked, &locked_index);
+	parent_inumber = aux_lookup(parent_name, locked, &locked_index, NULL, 0);
 
 	if (parent_inumber == FAIL)
 	{
@@ -278,78 +279,69 @@ int delete (char *name)
  */
 int move(char *src, char *dest)
 {
-	int sparent_inumber, dparent_inumber, moved_inode;
-	int slocked[INODE_TABLE_SIZE] = {0}; /* Locked inumbers to the to the source parent directory */
-	int dlocked[INODE_TABLE_SIZE] = {0}; /* Locked inumbers to the to the destination parent directory */
-	int sindex, dindex;
-	char *sparent_name, *schild_name, *dparent_name, *dchild_name;
-	type sType, dType;
-	union Data sdata, ddata;
+	int sparent_inumber, dparent_inumber, moved_inumber;		   /* src parent inumber, destination parent inumber, moved file inumber */
+	int slocked[INODE_TABLE_SIZE] = {0};						   /* Locked inumbers to the to the source parent directory */
+	int dlocked[INODE_TABLE_SIZE] = {0};						   /* Locked inumbers to the to the destination parent directory */
+	int sindex, dindex;											   /* represent the ammount of locks needed to get to source (sindex) or to destination (source) */
+	char *sparent_name, *schild_name, *dparent_name, *dchild_name; /* Used for name splitting */
+	type sType, dType;											   /* used for getting the type of the source, destination and moved inodes*/
+	union Data sdata, ddata;									   /* used for getting the date of the source, detination and moved inodes */
 
-	split_parent_child_from_path(dest, &dparent_name, &dchild_name);
-	split_parent_child_from_path(src, &sparent_name, &schild_name);
+	int ddepth = split_parent_child_from_path(dest, &dparent_name, &dchild_name); /* Splitting paths and getting depth of each path */
+	int sdepth = split_parent_child_from_path(src, &sparent_name, &schild_name);
 
-	/* Getting the supposed inumbers, to establish an order */
-	sparent_inumber = lookup(sparent_name);
-	dparent_inumber = lookup(dparent_name);
+	/* Checking for loop cases m /a /a/a */
+	if (strcmp(schild_name, dparent_name + 1) == 0 && *sparent_name == '\0')
+		return FAIL;
 
-	// Establishing a locking order for the deadlocks
-	if (sparent_inumber > dparent_inumber)
+	/* Establishing an order for locking, the shallowest inode first */
+	if (sdepth <= ddepth)
 	{
-		sparent_inumber = aux_lookup(sparent_name, slocked, &sindex);
-		dparent_inumber = aux_lookup(dparent_name, dlocked, &dindex);
-	}
-	else if (sparent_inumber < dparent_inumber)
-	{
-		dparent_inumber = aux_lookup(dparent_name, dlocked, &dindex);
-		sparent_inumber = aux_lookup(sparent_name, slocked, &sindex);
+		sparent_inumber = aux_lookup(sparent_name, slocked, &sindex, NULL, 0);
+		dparent_inumber = aux_lookup(dparent_name, dlocked, &dindex, slocked, sindex);
 	}
 	else
 	{
-		/* The case we move inside a folder (file rename) */
-		sparent_inumber = aux_lookup(sparent_name, slocked, &sindex);
+		dparent_inumber = aux_lookup(dparent_name, dlocked, &dindex, NULL, 0);
+		sparent_inumber = aux_lookup(sparent_name, slocked, &sindex, dlocked, dindex);
 	}
 
-	// Verify src and dest actually exists
+	// Verifying src and dest parent actually exist
 	if (sparent_inumber < 0 || dparent_inumber < 0)
 	{
 		unlockAll(slocked, sindex);
-		if (dparent_inumber != sparent_inumber)
-			unlockAll(dlocked, dindex);
+		unlockAll(dlocked, dindex);
 		return FAIL;
 	}
 
-	// Veryfing dest is a folder and doenst contain another file with the same name
+	// Veryfying the destination is a folder and doesnt contain another file with the same name
 	inode_get(dparent_inumber, &dType, &ddata);
 	if (dType != T_DIRECTORY || lookup_sub_node(dchild_name, ddata.dirEntries) != FAIL)
 	{
 		unlockAll(slocked, sindex);
-		if (dparent_inumber != sparent_inumber)
-			unlockAll(dlocked, dindex);
+		unlockAll(dlocked, dindex);
 		return FAIL;
 	}
 
-	// Veryfing the file we want to move exists isnt a folder
+	// Veryfying the inode (either file or dir) we want to move exists
 	inode_get(sparent_inumber, &sType, &sdata);
-	moved_inode = lookup_sub_node(schild_name, sdata.dirEntries);
-	if (sType != T_DIRECTORY || moved_inode == FAIL)
+	moved_inumber = lookup_sub_node(schild_name, sdata.dirEntries);
+	if (sType != T_DIRECTORY || moved_inumber == FAIL)
 	{
 		unlockAll(slocked, sindex);
-		if (dparent_inumber != sparent_inumber)
-			unlockAll(dlocked, dindex);
+		unlockAll(dlocked, dindex);
 		return FAIL;
 	}
 
-	// Remove dirEntry from source
-	dir_remove_entry(sparent_inumber, moved_inode);
+	/* Actual move operation happens here */
 
+	// Remove dirEntry from source
+	dir_remove_entry(sparent_inumber, moved_inumber);
 	// Add dirEntry to dest
-	dir_add_entry(dparent_inumber, moved_inode, dchild_name);
+	dir_add_entry(dparent_inumber, moved_inumber, dchild_name);
 
 	unlockAll(slocked, sindex);
-	if (dparent_inumber != sparent_inumber)
-		unlockAll(dlocked, dindex);
-
+	unlockAll(dlocked, dindex);
 	return SUCCESS;
 }
 
@@ -363,8 +355,8 @@ int move(char *src, char *dest)
  */
 int lookup(char *name)
 {
-	int locked[50] = {0};
-	int locked_ammount = 0;
+	int locked[INODE_TABLE_SIZE] = {0};
+	int index = 0;
 	char *saveptr;
 	char full_path[MAX_FILE_NAME];
 	char delim[] = "/";
@@ -379,7 +371,7 @@ int lookup(char *name)
 
 	/* Critical Zone */
 	inodeLock('r', current_inumber); /* Locking the root folder */
-	locked[locked_ammount++] = current_inumber;
+	locked[index++] = current_inumber;
 
 	/* get root inode data */
 	inode_get(current_inumber, &nType, &data);
@@ -389,16 +381,24 @@ int lookup(char *name)
 	while (path != NULL && (current_inumber = lookup_sub_node(path, data.dirEntries)) != FAIL)
 	{
 		inodeLock('r', current_inumber); /*  Locking all the nodes along the lookup path */
-		locked[locked_ammount++] = current_inumber;
+		locked[index++] = current_inumber;
 
 		inode_get(current_inumber, &nType, &data);
 		path = strtok_r(NULL, delim, &saveptr);
 	}
-
-	for (int i = 0; i < locked_ammount; i++)
-		inodeUnlock(locked[i]);
-
+	/* Unlocking in reverse order */
+	unlockAll(locked, index);
 	return current_inumber;
+}
+
+int linear_search(int *array, int length, int el)
+{
+	for (int i = 0; i < length; i++)
+	{
+		if (array[i] == el)
+			return SUCCESS;
+	}
+	return FAIL;
 }
 
 /*
@@ -409,7 +409,7 @@ int lookup(char *name)
  *  inumber: identifier of the i-node, if found
  *     FAIL: otherwise
  */
-int aux_lookup(char *name, int *locked, int *index)
+int aux_lookup(char *name, int *locked, int *index, int *already_locked, int already_locked_index)
 {
 	int locked_index = 0;
 	char *saveptr;
@@ -424,32 +424,32 @@ int aux_lookup(char *name, int *locked, int *index)
 	type nType;
 	union Data data;
 
-	/* Critical Zone */
 	char *path = strtok_r(full_path, delim, &saveptr);
-	if (path == NULL)
-		inodeLock('w', current_inumber); /* Locking the root folder */
-	else
-		inodeLock('r', current_inumber); /* Locking the root folder */
-
-	locked[locked_index++] = current_inumber;
-
-	/* get root inode data */
+	if (already_locked_index == 0 || linear_search(already_locked, already_locked_index, current_inumber) == FAIL)
+	{
+		if (path == NULL)
+			inodeLock('w', current_inumber); /* Locking the root folder */
+		else
+			inodeLock('r', current_inumber); /* Locking the root folder */
+		locked[locked_index++] = current_inumber;
+	}
 	inode_get(current_inumber, &nType, &data);
 
 	/* search for all sub nodes */
 	while (path != NULL && (current_inumber = lookup_sub_node(path, data.dirEntries)) != FAIL)
 	{
 		path = strtok_r(NULL, delim, &saveptr);
-		/* if its the last inode in the lookup, lock for writing */
-		if (path == NULL)
-			inodeLock('w', current_inumber);
-		else
-			inodeLock('r', current_inumber); /*  Locking all the nodes along the lookup path */
-
-		locked[locked_index++] = current_inumber;
+		/* Check if the node has been locked previously */
+		if (already_locked_index == 0 || linear_search(already_locked, already_locked_index, current_inumber) == 0)
+		{
+			if (path == NULL)
+				inodeLock('w', current_inumber);
+			else
+				inodeLock('r', current_inumber); /*  Locking all the nodes along the lookup path */
+			locked[locked_index++] = current_inumber;
+		}
 		inode_get(current_inumber, &nType, &data);
 	}
-
 	*index = locked_index;
 	return current_inumber;
 }
