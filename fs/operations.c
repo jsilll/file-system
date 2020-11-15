@@ -292,8 +292,18 @@ int move(char *src, char *dest)
 	int sdepth = split_parent_child_from_path(src, &sparent_name, &schild_name);
 
 	/* Checking for loop cases m /a /a/a */
-	if (strcmp(schild_name, dparent_name + 1) == 0 && *sparent_name == '\0')
-		return FAIL;
+	if (dparent_name[0] == '/')
+	{
+		/* m /a /a/a */
+		if (strcmp(schild_name, dparent_name + 1) == 0 && *sparent_name == '\0')
+			return FAIL;
+	}
+	else
+	{
+		/* m /a a/a */
+		if (strcmp(schild_name, dparent_name) == 0 && *sparent_name == '\0')
+			return FAIL;
+	}
 
 	/* Establishing an order for locking, the shallowest inode first */
 	if (sdepth < ddepth)
