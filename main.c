@@ -16,7 +16,7 @@ char inputCommands[MAX_COMMANDS][MAX_INPUT_SIZE];
 
 int prodptr = 0, consptr = 0, count = 0;
 pthread_mutex_t commandsMutex;
-pthread_cond_t podeProduzir, podeConsumir;
+pthread_cond_t mayProvide, mayConsume;
 int endoffile = 0;
 
 void commandsLock()
@@ -29,6 +29,27 @@ void commandsUnlock()
 {
 	if (pthread_mutex_unlock(&commandsMutex) != 0)
 		exit(EXIT_FAILURE);
+}
+
+void safeSignal(pthread_cond_t *cond)
+{
+	if (pthread_cond_signal(cond) != 0)
+	{
+		exit(EXIT_FAILURE);
+	}
+}
+
+void safeBroadcast(pthread_cond_t *cond)
+{
+	pthread_cond_broadcast(cond);
+}
+
+void safeWait(pthread_cond_t *cond, pthread_mutex_t *mutex)
+{
+	if (pthread_cond_wait(cond, mutex) != 0)
+	{
+		exit(EXIT_FAILURE);
+	}
 }
 
 void validateInitArgs(int argc, char *argv[])
@@ -46,7 +67,7 @@ void validateInitArgs(int argc, char *argv[])
 	}
 }
 
-FILE *fopenSafe(char *file_name, const char *mode)
+FILE *safeFopen(char *file_name, const char *mode)
 {
 	FILE *fp = fopen(file_name, mode);
 	if (!fp)
@@ -68,7 +89,7 @@ FILE *fopenSafe(char *file_name, const char *mode)
 	return fp;
 }
 
-int fcloseSafe(FILE *file)
+int safeFclose(FILE *file)
 {
 	if (fclose(file) == EOF)
 		fprintf(stderr, "Error closing a file.\n");
@@ -79,14 +100,14 @@ void syncdInsertCommand(char *data)
 {
 	commandsLock();
 	while (count == MAX_COMMANDS)
-		pthread_cond_wait(&podeProduzir, &commandsMutex);
+		safeWait(&mayProvide, &commandsMutex);
 
 	strcpy(inputCommands[prodptr], data);
 	prodptr++;
 	if (prodptr == MAX_COMMANDS)
 		prodptr = 0;
 	count++;
-	pthread_cond_signal(&podeConsumir);
+	safeSignal(&mayConsume);
 	commandsUnlock();
 }
 
@@ -95,7 +116,7 @@ int syncdRemoveCommand(char *command)
 	commandsLock();
 	/* Waiting for a command to process */
 	while (count == 0 && !endoffile)
-		pthread_cond_wait(&podeConsumir, &commandsMutex);
+		safeWait(&mayConsume, &commandsMutex);
 
 	/* In case there's no more commands to process */
 	if (count == 0 && endoffile)
@@ -112,7 +133,7 @@ int syncdRemoveCommand(char *command)
 		consptr = 0;
 	count--;
 
-	pthread_cond_signal(&podeProduzir);
+	safeSignal(&mayProvide);
 	commandsUnlock();
 	return 0;
 }
@@ -169,7 +190,7 @@ void *providerThread(void *commands_file)
 
 	commandsLock();
 	endoffile = 1;
-	pthread_cond_broadcast(&podeConsumir);
+	safeBroadcast(&mayConsume);
 	commandsUnlock();
 
 	return NULL;
@@ -295,13 +316,13 @@ int main(int argc, char *argv[])
 
 	gettimeofday(&begin, 0);
 
-	file_buffer = fopenSafe(argv[1], "r");
+	file_buffer = safeFopen(argv[1], "r");
 	executeThreads(argv[3], file_buffer);
-	fcloseSafe(file_buffer);
+	safeFclose(file_buffer);
 
-	file_buffer = fopenSafe(argv[2], "w");
+	file_buffer = safeFopen(argv[2], "w");
 	print_tecnicofs_tree(file_buffer);
-	fcloseSafe(file_buffer);
+	safeFclose(file_buffer);
 	destroy_fs();
 
 	gettimeofday(&end, 0);

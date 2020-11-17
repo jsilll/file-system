@@ -335,7 +335,7 @@ int move(char *src, char *dest)
 		}
 	}
 
-	// Now that we locked everything, verifying src and dest parent actually exist
+	// With everything locked verify src and dest parent actually exist
 	if (sparent_inumber < 0 || dparent_inumber < 0)
 	{
 		unlockAll(slocked, sindex);
