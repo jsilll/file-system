@@ -18,12 +18,16 @@ void inodeLock(char lockmethod, int inumber)
 	{
 	case 'r':
 		if (pthread_rwlock_rdlock(&inode_table[inumber].lock) != 0)
+		{
 			exit(EXIT_FAILURE);
+		}
 		break;
 
 	case 'w':
 		if (pthread_rwlock_wrlock(&inode_table[inumber].lock) != 0)
+		{
 			exit(EXIT_FAILURE);
+		}
 		break;
 
 	default:
@@ -38,7 +42,9 @@ void inodeLock(char lockmethod, int inumber)
 void inodeUnlock(int inumber)
 {
 	if (pthread_rwlock_unlock(&inode_table[inumber].lock) != 0)
+	{
 		exit(EXIT_FAILURE);
+	}
 }
 
 /*
@@ -47,7 +53,9 @@ void inodeUnlock(int inumber)
 void unlockAll(int *locked, int index)
 {
 	for (--index; index >= 0; index--)
+	{
 		inodeUnlock(locked[index]);
+	}
 }
 
 /*
@@ -253,7 +261,6 @@ int dir_add_entry(int inumber, int sub_inumber, char *sub_name)
 
 	if (inode_table[inumber].nodeType != T_DIRECTORY)
 	{
-
 		printf("inode_add_entry: can only add entry to directories\n");
 		return FAIL;
 	}

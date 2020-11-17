@@ -22,31 +22,14 @@ int endoffile = 0;
 void commandsLock()
 {
 	if (pthread_mutex_lock(&commandsMutex) != 0)
-		exit(EXIT_FAILURE);
-}
-
-void commandsUnlock()
-{
-	if (pthread_mutex_unlock(&commandsMutex) != 0)
-		exit(EXIT_FAILURE);
-}
-
-void safeSignal(pthread_cond_t *cond)
-{
-	if (pthread_cond_signal(cond) != 0)
 	{
 		exit(EXIT_FAILURE);
 	}
 }
 
-void safeBroadcast(pthread_cond_t *cond)
+void commandsUnlock()
 {
-	pthread_cond_broadcast(cond);
-}
-
-void safeWait(pthread_cond_t *cond, pthread_mutex_t *mutex)
-{
-	if (pthread_cond_wait(cond, mutex) != 0)
+	if (pthread_mutex_unlock(&commandsMutex) != 0)
 	{
 		exit(EXIT_FAILURE);
 	}
@@ -100,14 +83,22 @@ void syncdInsertCommand(char *data)
 {
 	commandsLock();
 	while (count == MAX_COMMANDS)
-		safeWait(&mayProvide, &commandsMutex);
+	{
+		if (pthread_cond_wait(&mayProvide, &commandsMutex) != 0)
+		{
+			exit(EXIT_FAILURE);
+		}
+	}
 
 	strcpy(inputCommands[prodptr], data);
 	prodptr++;
 	if (prodptr == MAX_COMMANDS)
 		prodptr = 0;
 	count++;
-	safeSignal(&mayConsume);
+	if (pthread_cond_signal(&mayConsume) != 0)
+	{
+		exit(EXIT_FAILURE);
+	}
 	commandsUnlock();
 }
 
@@ -116,7 +107,12 @@ int syncdRemoveCommand(char *command)
 	commandsLock();
 	/* Waiting for a command to process */
 	while (count == 0 && !endoffile)
-		safeWait(&mayConsume, &commandsMutex);
+	{
+		if (pthread_cond_wait(&mayConsume, &commandsMutex) != 0)
+		{
+			exit(EXIT_FAILURE);
+		}
+	}
 
 	/* In case there's no more commands to process */
 	if (count == 0 && endoffile)
@@ -133,7 +129,10 @@ int syncdRemoveCommand(char *command)
 		consptr = 0;
 	count--;
 
-	safeSignal(&mayProvide);
+	if (pthread_cond_signal(&mayProvide) != 0)
+	{
+		exit(EXIT_FAILURE);
+	}
 	commandsUnlock();
 	return 0;
 }
@@ -190,7 +189,10 @@ void *providerThread(void *commands_file)
 
 	commandsLock();
 	endoffile = 1;
-	safeBroadcast(&mayConsume);
+	if (pthread_cond_broadcast(&mayConsume) != 0)
+	{
+		exit(EXIT_FAILURE);
+	}
 	commandsUnlock();
 
 	return NULL;
