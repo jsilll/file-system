@@ -15,11 +15,20 @@
 - [x] Nova operação: mover ficheiro ou diretoria
 - [x] Shell script
 
-# SO Project 2020-21
+How to run server:
 
-## Exercise 3 base code.
+Execute the following command:
 
-## How to run
+```
+./tecnicofs-client <inputfile> <outputfile> <num_threads>
+```
+
+### Exercise 3
+
+- [ ] Comunicação com processos cliente.
+- [ ] Nova operação ‘p’.
+
+How to run client:
 
 Execute the following command:
 
