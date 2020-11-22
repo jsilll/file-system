@@ -1,9 +1,9 @@
 #ifndef INODES_H
 #define INODES_H
 
+#include "../tecnicofs-api-constants.h"
 #include <stdio.h>
 #include <stdlib.h>
-#include "../tecnicofs-api-constants.h"
 
 /* FS root inode number */
 #define FS_ROOT 0
@@ -20,30 +20,27 @@
 /*
  * Contains the name of the entry and respective i-number
  */
-typedef struct dirEntry
-{
-	char name[MAX_FILE_NAME];
-	int inumber;
+typedef struct dirEntry {
+  char name[MAX_FILE_NAME];
+  int inumber;
 } DirEntry;
 
 /*
  * Data is either text (file) or entries (DirEntry)
  */
-union Data
-{
-	char *fileContents;	  /* for files */
-	DirEntry *dirEntries; /* for directories */
+union Data {
+  char *fileContents;   /* for files */
+  DirEntry *dirEntries; /* for directories */
 };
 
 /*
  * I-node definition
  */
-typedef struct inode_t
-{
-	pthread_rwlock_t lock;
-	type nodeType;
-	union Data data;
-	/* more i-node attributes will be added in future exercises */
+typedef struct inode_t {
+  pthread_rwlock_t lock;
+  type nodeType;
+  union Data data;
+  /* more i-node attributes will be added in future exercises */
 } inode_t;
 
 void inodeLock(char lockmethod, int inumber);

@@ -4,17 +4,8 @@
 
 #define MAX_FILE_NAME 100
 
-typedef enum permission {
-	NONE,
-	WRITE,
-	READ,
-	RW
-} permission;
-typedef enum type {
-	T_FILE,
-	T_DIRECTORY,
-	T_NONE
-} type;
+typedef enum permission { NONE, WRITE, READ, RW } permission;
+typedef enum type { T_FILE, T_DIRECTORY, T_NONE } type;
 
 /* Client already has an open session with a TecnicoFS server */
 #define TECNICOFS_ERROR_OPEN_SESSION -1

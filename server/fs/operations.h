@@ -17,7 +17,8 @@ int move(char *src, char *dest);
 
 int lookup(char *name);
 
-int aux_lookup(char *name, int *locked, int *index, int *already_locked, int already_locked_amount);
+int aux_lookup(char *name, int *locked, int *index, int *already_locked,
+               int already_locked_amount);
 
 void print_tecnicofs_tree(FILE *fp);
 
