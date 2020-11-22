@@ -15,10 +15,10 @@ all: tecnicofs-client
 tecnicofs-client: tecnicofs-client-api.o tecnicofs-client.o
 	$(LD) $(CFLAGS) $(LDFLAGS) -o tecnicofs-client tecnicofs-client-api.o tecnicofs-client.o
 
-tecnicofs-client.o: tecnicofs-client.c ../tecnicofs-api-constants.h tecnicofs-client-api.h
+tecnicofs-client.o: tecnicofs-client.c tecnicofs-api-constants.h tecnicofs-client-api.h
 	$(CC) $(CFLAGS) -o tecnicofs-client.o -c tecnicofs-client.c
 
-tecnicofs-client-api.o: tecnicofs-client-api.c ../tecnicofs-api-constants.h tecnicofs-client-api.h
+tecnicofs-client-api.o: tecnicofs-client-api.c tecnicofs-api-constants.h tecnicofs-client-api.h
 	$(CC) $(CFLAGS) -o tecnicofs-client-api.o -c tecnicofs-client-api.c
 
 clean:
