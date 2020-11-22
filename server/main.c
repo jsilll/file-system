@@ -16,8 +16,8 @@ char inputCommands[MAX_COMMANDS][MAX_INPUT_SIZE];
 
 int prodptr = 0, consptr = 0, count = 0;
 pthread_mutex_t commandsMutex = PTHREAD_MUTEX_INITIALIZER;
-pthread_cond_t mayProvide = PTHREAD_COND_INITIALIZER,
-               mayConsume = PTHREAD_COND_INITIALIZER;
+pthread_cond_t mayProvide = PTHREAD_COND_INITIALIZER;
+pthread_cond_t mayConsume = PTHREAD_COND_INITIALIZER;
 int endoffile = 0;
 
 void commandsLock() {
