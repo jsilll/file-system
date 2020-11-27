@@ -1,0 +1,13 @@
+Duvidas para o projeto de SO:
+
+- Quao verboso deve ser o servidor, faz os mesmos prints que fazia em cada operacao?
+
+
+
+
+- Quao verboso deve ser a API, podemos criar varios tipos de erro ou só SUCCESS or FAIL?
+
+
+- Temos de usar todos os outros erros já feitos pelos professores?
+- A pasta /tmp é usada por defeito ou tem de ser passada nos argumentos?
+- O que fazer quanto aos erros dos fopens na funcao main do server? (operacao p)

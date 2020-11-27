@@ -1,295 +1,197 @@
-#include "fs/operations.h"
 #include <ctype.h>
 #include <getopt.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/time.h>
+#include <sys/socket.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <sys/uio.h>
+#include <sys/un.h>
 #include <unistd.h>
+#include "fs/operations.h"
 
-#define MAX_COMMANDS 10
 #define MAX_INPUT_SIZE 100
 
-int numberThreads = 0;
-char inputCommands[MAX_COMMANDS][MAX_INPUT_SIZE];
-
-int prodptr = 0, consptr = 0, count = 0;
-pthread_mutex_t commandsMutex = PTHREAD_MUTEX_INITIALIZER;
-pthread_cond_t mayProvide = PTHREAD_COND_INITIALIZER;
-pthread_cond_t mayConsume = PTHREAD_COND_INITIALIZER;
-int endoffile = 0;
-
-void commandsLock() {
-  if (pthread_mutex_lock(&commandsMutex) != 0) {
+void validateInitArgs(int argc, char *argv[])
+{
+  /* Usage: ./tecnicofs numthreads nomesocket */
+  if (argc != 3)
+  {
+    fprintf(stderr, "Usage: [numthreads] [nomesocket].\n");
     exit(EXIT_FAILURE);
   }
-}
-
-void commandsUnlock() {
-  if (pthread_mutex_unlock(&commandsMutex) != 0) {
-    exit(EXIT_FAILURE);
-  }
-}
-
-void validateInitArgs(int argc, char *argv[]) {
-  /* Usage: ./tecnicofs inputfile outputfile numthreads*/
-  if (argc != 4) {
-    fprintf(stderr, "Usage: [inputfile] [outputfile] [numthreads].\n");
-    exit(EXIT_FAILURE);
-  } else if (atoi(argv[3]) <= 0) {
+  else if (atoi(argv[1]) <= 0)
+  {
     fprintf(stderr, "Invalid numthreads.\n");
     exit(EXIT_FAILURE);
   }
 }
 
-FILE *safeFopen(char *file_name, const char *mode) {
-  FILE *fp = fopen(file_name, mode);
-  if (!fp) {
-    switch (mode[0]) {
-    case 'r':
-      fprintf(stderr, "Error opening input file: %s.\n", file_name);
-      break;
-    case 'w':
-      fprintf(stderr, "Error opening output file: %s.\n", file_name);
-      break;
-    default:
-      fprintf(stderr, "Error opening a file: %s\n", file_name);
-      break;
-    }
-    exit(EXIT_FAILURE);
-  }
-  return fp;
-}
-
-int safeFclose(FILE *file) {
-  if (fclose(file) == EOF)
-    fprintf(stderr, "Error closing a file.\n");
-  return 0;
-}
-
-void syncdInsertCommand(char *data) {
-  commandsLock();
-  while (count == MAX_COMMANDS) {
-    if (pthread_cond_wait(&mayProvide, &commandsMutex) != 0) {
-      exit(EXIT_FAILURE);
-    }
-  }
-
-  strcpy(inputCommands[prodptr], data);
-  prodptr++;
-  if (prodptr == MAX_COMMANDS)
-    prodptr = 0;
-  count++;
-  if (pthread_cond_signal(&mayConsume) != 0) {
-    exit(EXIT_FAILURE);
-  }
-  commandsUnlock();
-}
-
-int syncdRemoveCommand(char *command) {
-  commandsLock();
-  /* Waiting for a command to process */
-  while (count == 0 && !endoffile) {
-    if (pthread_cond_wait(&mayConsume, &commandsMutex) != 0) {
-      exit(EXIT_FAILURE);
-    }
-  }
-
-  /* In case there's no more commands to process */
-  if (count == 0 && endoffile) {
-    commandsUnlock();
-    return -1;
-  }
-
-  /* Copying the command to the local variable */
-  strcpy(command, inputCommands[consptr++]);
-
-  /* Circular Buffer */
-  if (consptr == MAX_COMMANDS)
-    consptr = 0;
-  count--;
-
-  if (pthread_cond_signal(&mayProvide) != 0) {
-    exit(EXIT_FAILURE);
-  }
-  commandsUnlock();
-  return 0;
-}
-
-void errorParse() {
+void errorParse()
+{
   fprintf(stderr, "Error: command invalid\n");
   exit(EXIT_FAILURE);
 }
 
-void *providerThread(void *commands_file) {
-  char line[MAX_INPUT_SIZE];
-  int n = sizeof(line) / sizeof(char);
-
-  /* break loop with ^Z or ^D */
-  while (fgets(line, n, (FILE *)commands_file)) {
-    char token, type;
-    char name[MAX_INPUT_SIZE];
-    int numTokens = sscanf(line, "%c %s %c", &token, name, &type);
-
-    /* perform minimal validation */
-    if (numTokens < 1)
-      continue;
-
-    switch (token) {
-    case 'c':
-      if (numTokens != 3)
-        errorParse();
-      syncdInsertCommand(line);
-      break;
-    case 'l':
-      if (numTokens != 2)
-        errorParse();
-      syncdInsertCommand(line);
-      break;
-    case 'd':
-      if (numTokens != 2)
-        errorParse();
-      syncdInsertCommand(line);
-      break;
-    case 'm':
-      if (numTokens != 3)
-        errorParse();
-      syncdInsertCommand(line);
-    case '#':
-      break;
-    default:
-      errorParse();
-    }
-  }
-
-  commandsLock();
-  endoffile = 1;
-  if (pthread_cond_broadcast(&mayConsume) != 0) {
-    exit(EXIT_FAILURE);
-  }
-  commandsUnlock();
-
-  return NULL;
+void sendResponse(int sockfd, int response_code, struct sockaddr_un *client_addr, socklen_t addrlen)
+{
+  if (sendto(sockfd, &response_code, sizeof(int), 0, (struct sockaddr *)client_addr, addrlen) < 0)
+    perror("server: sendto error");
 }
 
-void *consumerThread() {
-  while (1) {
-    int numArgs;
-    char token;
-    char command[MAX_INPUT_SIZE];
-    char arg2[MAX_INPUT_SIZE];
-    char arg3[MAX_INPUT_SIZE];
+void *consumerThread(void *arg)
+{
+  int sockfd = *(int *)arg;
+  int numArgs;
+  char token;
+  char command[MAX_INPUT_SIZE];
+  char arg1[MAX_INPUT_SIZE];
+  char arg2[MAX_INPUT_SIZE];
 
-    if (syncdRemoveCommand(command) == -1)
-      return NULL;
+  struct sockaddr_un client_addr;
+  socklen_t addrlen;
+  int c;
+  int searchResult;
 
-    /* Splitting commands arguments */
-    numArgs = sscanf(command, "%c %s %s", &token, arg2, arg3);
+  FILE *fp;
 
-    /* Parsing the command */
-    if (numArgs < 2) {
-      fprintf(stderr, "Error: invalid command in Queue\n");
-      exit(EXIT_FAILURE);
+  addrlen = sizeof(struct sockaddr_un);
+  while (1)
+  {
+    c = recvfrom(sockfd, command, sizeof(command) - 1, 0, (struct sockaddr *)&client_addr, &addrlen);
+    if (c <= 0)
+      continue; 
+    // Isto nao acaba por ser uma espera ativa?
+    command[c] = '\0';
+    numArgs = sscanf(command, "%c %s %s", &token, arg1, arg2);
+    if (numArgs < 2)
+    {
+      sendResponse(sockfd, -11, &client_addr, addrlen);
+      continue;
     }
-    int searchResult;
-    switch (token) {
+    switch (token)
+    {
     case 'c':
-      switch (arg3[0]) {
+      switch (arg2[0])
+      {
       case 'f':
-        printf("Create file: %s\n", arg2);
-        create(arg2, T_FILE);
+        printf("Create file: %s\n", arg1);
+        sendResponse(sockfd, create(arg1, T_FILE), &client_addr, addrlen);
         break;
       case 'd':
-        printf("Create directory: %s\n", arg2);
-        create(arg2, T_DIRECTORY);
+        printf("Create directory: %s\n", arg1);
+        sendResponse(sockfd, create(arg1, T_DIRECTORY), &client_addr, addrlen);
         break;
       default:
         fprintf(stderr, "Error: invalid node type\n");
-        exit(EXIT_FAILURE);
+        sendResponse(sockfd, TECNICOFS_ERROR_INVALID_NODE_TYPE, &client_addr, addrlen);
       }
       break;
     case 'm':
-      printf("Move file: %s to %s\n", arg2, arg3);
-      move(arg2, arg3);
+      printf("Move file: %s to %s\n", arg1, arg2);
+      sendResponse(sockfd, move(arg1, arg2), &client_addr, addrlen);
       break;
     case 'l':
-      searchResult = lookup(arg2);
+      searchResult = lookup(arg1);
       if (searchResult >= 0)
-        printf("Search: %s found\n", arg2);
+      {
+        printf("Search: %s found\n", arg1);
+        sendResponse(sockfd, searchResult, &client_addr, addrlen);
+      }
       else
-        printf("Search: %s not found\n", arg2);
+      {
+        printf("Search: %s not found\n", arg1);
+        sendResponse(sockfd, searchResult, &client_addr, addrlen);
+      }
       break;
     case 'd':
-      printf("Delete: %s\n", arg2);
-      delete (arg2);
+      printf("Delete: %s\n", arg1);
+      sendResponse(sockfd, delete(arg1), &client_addr, addrlen);
       break;
-    default: {
+    case 'p':
+      printf("Print: %s\n", arg1);
+      fp = fopen(arg1, "w");
+      if (fp == NULL)
+      {
+        sendResponse(sockfd, TECNICOFS_ERROR_FILE_NOT_OPEN, &client_addr, addrlen);
+        break;
+      }
+      print_tecnicofs_tree(fp);
+      fclose(fp);
+      sendResponse(sockfd, SUCCESS, &client_addr, addrlen);
+      break;
+    default:
+    {
       fprintf(stderr, "Error: command to apply\n");
-      exit(EXIT_FAILURE);
+      sendResponse(sockfd, -11, &client_addr, addrlen);
     }
     }
   }
 }
 
-void executeThreads(char *threads_count_char, FILE *commands_file) {
+void executeThreads(char *threads_count_char, int sockfd)
+{
   int i, *result;
   int threads_count = atoi(threads_count_char);
-  pthread_t command_thread, worker_tid[threads_count];
-
-  /* Creating provider thread */
-  if (pthread_create(&command_thread, NULL, providerThread,
-                     (void *)commands_file) != 0) {
-    fprintf(stderr, "Failed to create provider thread.\n");
-    exit(EXIT_FAILURE);
-  }
-
-  /* Creating all the consumer threads */
-  for (i = 0; i < threads_count; i++) {
-    if (pthread_create(&worker_tid[i], NULL, consumerThread, NULL) != 0) {
+  pthread_t tid[threads_count];
+  for (i = 0; i < threads_count; i++)
+  {
+    if (pthread_create(&tid[i], NULL, consumerThread, (void *)&sockfd) != 0)
+    {
       fprintf(stderr, "Failed to create a thread %d.\n", i);
       exit(EXIT_FAILURE);
     }
   }
 
-  /* Waiting for the provider thread */
-  if (pthread_join(command_thread, (void **)&result) != 0) {
-    printf("Error while joining thread.\n");
-  }
-
-  /* Waiting for all the consumer threads */
-  for (i = 0; i < threads_count; i++) {
-    if (pthread_join(worker_tid[i], (void **)&result) != 0)
+  for (i = 0; i < threads_count; i++)
+  {
+    if (pthread_join(tid[i], (void **)&result) != 0)
       printf("Error while joining thread.\n");
   }
+
 }
 
-double timeDiff(struct timeval *begin, struct timeval *end) {
-  long seconds = end->tv_sec - begin->tv_sec;
-  long microseconds = end->tv_usec - begin->tv_usec;
-  double elapsed = seconds + microseconds * 1e-6;
-  return elapsed;
+int setSockAddrUn(char *path, struct sockaddr_un *addr)
+{
+  if (addr == NULL)
+    return 0;
+  bzero((char *)addr, sizeof(struct sockaddr_un));
+  addr->sun_family = AF_UNIX;
+  strcpy(addr->sun_path, path);
+  return SUN_LEN(addr);
 }
 
-int main(int argc, char *argv[]) {
-  struct timeval begin, end;
-  FILE *file_buffer;
+int socketMount(char *socket_name)
+{
+  int sockfd;
+  struct sockaddr_un server_addr;
 
+  if ((sockfd = socket(AF_UNIX, SOCK_DGRAM, 0)) < 0)
+  {
+    perror("server: can't open socket");
+    exit(EXIT_FAILURE);
+  }
+  unlink(socket_name);
+  if (bind(sockfd, (struct sockaddr *)&server_addr, setSockAddrUn(socket_name, &server_addr)) < 0)
+  {
+    perror("server: bind error");
+    exit(EXIT_FAILURE);
+  }
+  return sockfd;
+}
+
+int main(int argc, char *argv[])
+{
+  int sockfd;
   validateInitArgs(argc, argv);
   init_fs();
-
-  gettimeofday(&begin, 0);
-
-  file_buffer = safeFopen(argv[1], "r");
-  executeThreads(argv[3], file_buffer);
-  safeFclose(file_buffer);
-
-  file_buffer = safeFopen(argv[2], "w");
-  print_tecnicofs_tree(file_buffer);
-  safeFclose(file_buffer);
+  sockfd = socketMount(argv[2]);
+  executeThreads(argv[1], sockfd);
+  close(sockfd);
+  unlink(argv[2]);
+  exit(EXIT_SUCCESS);
   destroy_fs();
-
-  gettimeofday(&end, 0);
-  printf("TecnicoFS completed in %.4f seconds.\n", timeDiff(&begin, &end));
   exit(EXIT_SUCCESS);
 }
