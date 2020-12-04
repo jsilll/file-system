@@ -120,7 +120,12 @@ int lookup_sub_node(char *name, DirEntry *entries)
  * Input:
  *  - name: path of node
  *  - nodeType: type of node
- * Returns: SUCCESS or FAIL
+ * Returns: SUCCESS or 
+ * TECNICOFS_ERROR_INVALID_PARENT_DIR 
+ * TECNICOFS_ERROR_PARENT_NOT_DIR 
+ * TECNICOFS_ERROR_FILE_ALREADY_EXISTS 
+ * TECNICOFS_ERROR_COULDNT_ALLOCATE_INODE
+ * TECNICOFS_ERROR_COULDNT_ADD_ENTRY
  */
 int create(char *name, type nodeType)
 {
@@ -185,7 +190,13 @@ int create(char *name, type nodeType)
  * Deletes a node given a path.
  * Input:
  *  - name: path of node
- * Returns: SUCCESS or FAIL
+ * Returns: SUCCESS or 
+ * TECNICOFS_ERROR_INVALID_PARENT_DIR 
+ * TECNICOFS_ERROR_PARENT_NOT_DIR
+ * TECNICOFS_ERROR_DOESNT_EXIST_IN_DIR 
+ * TECNICOFS_ERROR_DIR_NOT_EMPTY
+ * TECNICOFS_ERROR_FAILED_REMOVE_FROM_DIR
+ * TECNICOFS_ERROR_FAILED_DELETE_INODE
  */
 int delete (char *name)
 {
@@ -288,13 +299,13 @@ int move(char *src, char *dest)
   {
     /* m /a /a/a */
     if (strcmp(schild_name, dparent_name + 1) == 0 && *sparent_name == '\0')
-      return FAIL;
+      return TECNICOFS_ERROR_MOVE_TO_ITSELF;
   }
   else
   {
     /* m /a a/a */
     if (strcmp(schild_name, dparent_name) == 0 && *sparent_name == '\0')
-      return FAIL;
+      return TECNICOFS_ERROR_MOVE_TO_ITSELF;
   }
 
   /* Establishing an order for locking, the shallowest inode first */
@@ -337,18 +348,16 @@ int move(char *src, char *dest)
   {
     unlockAll(slocked, sindex);
     unlockAll(dlocked, dindex);
-    return FAIL;
+    return TECNICOFS_ERROR_INVALID_PARENT_DIR;
   }
 
-  // Veryfying the destination is a folder and doesnt contain another file with
-  // the same name
+  // Veryfying the destination is a folder and doesnt contain another file with the same name
   inode_get(dparent_inumber, &dType, &ddata);
-  if (dType != T_DIRECTORY ||
-      lookup_sub_node(dchild_name, ddata.dirEntries) != FAIL)
+  if (dType != T_DIRECTORY || lookup_sub_node(dchild_name, ddata.dirEntries) != FAIL)
   {
     unlockAll(slocked, sindex);
     unlockAll(dlocked, dindex);
-    return FAIL;
+    return TECNICOFS_ERROR_FILE_ALREADY_EXISTS;
   }
 
   // Veryfying the inode we want to move exists
@@ -358,7 +367,7 @@ int move(char *src, char *dest)
   {
     unlockAll(slocked, sindex);
     unlockAll(dlocked, dindex);
-    return FAIL;
+    return TECNICOFS_ERROR_FILE_NOT_FOUND;
   }
 
   /* Actual move operation happens here */
@@ -403,12 +412,9 @@ int lookup(char *name)
   char *path = strtok_r(full_path, delim, &saveptr);
 
   /* search for all sub nodes */
-  while (path != NULL &&
-         (current_inumber = lookup_sub_node(path, data.dirEntries)) != FAIL)
+  while (path != NULL && (current_inumber = lookup_sub_node(path, data.dirEntries)) != FAIL)
   {
-    inodeLock(
-        'r',
-        current_inumber); /*  Locking all the nodes along the lookup path */
+    inodeLock('r', current_inumber); /*  Locking all the nodes along the lookup path */
     locked[index++] = current_inumber;
 
     inode_get(current_inumber, &nType, &data);
@@ -416,6 +422,10 @@ int lookup(char *name)
   }
   /* Unlocking in reverse order */
   unlockAll(locked, index);
+
+  if (current_inumber < 0)
+    return TECNICOFS_ERROR_FILE_NOT_FOUND;
+
   return current_inumber;
 }
 
@@ -447,8 +457,7 @@ int linear_search(int *array, int length, int el)
  *  inumber: identifier of the i-node, if found
  *     FAIL: otherwise
  */
-int aux_lookup(char *name, int *locked, int *index, int *already_locked,
-               int already_locked_index)
+int aux_lookup(char *name, int *locked, int *index, int *already_locked, int already_locked_index)
 {
   int locked_index = 0;
   char *saveptr;
@@ -465,9 +474,7 @@ int aux_lookup(char *name, int *locked, int *index, int *already_locked,
 
   /* First iteration outside the loop, for the root folder */
   char *path = strtok_r(full_path, delim, &saveptr);
-  if (already_locked_index == 0 ||
-      linear_search(already_locked, already_locked_index, current_inumber) ==
-          FAIL)
+  if (already_locked_index == 0 || linear_search(already_locked, already_locked_index, current_inumber) == FAIL)
   {
     if (path == NULL)
       inodeLock('w', current_inumber); /* Locking the root folder */
@@ -483,9 +490,7 @@ int aux_lookup(char *name, int *locked, int *index, int *already_locked,
   {
     path = strtok_r(NULL, delim, &saveptr);
     /* Check if the node has been locked previously */
-    if (already_locked_index == 0 ||
-        linear_search(already_locked, already_locked_index, current_inumber) ==
-            0)
+    if (already_locked_index == 0 || linear_search(already_locked, already_locked_index, current_inumber) == 0)
     {
       if (path == NULL)
         inodeLock('w', current_inumber);

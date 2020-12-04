@@ -7,6 +7,8 @@
 #include <sys/un.h>
 #include <unistd.h>
 
+#define SUCESS 0
+
 FILE *inputFile;
 char *serverName;
 

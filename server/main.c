@@ -14,9 +14,14 @@
 
 #define MAX_INPUT_SIZE 100
 
+/*
+ * Validates the initial arguments for the program.
+ * Input:
+ *  - argc: number of arguments in argv
+ *  - argv: array passed arguments
+ */
 void validateInitArgs(int argc, char *argv[])
 {
-  /* Usage: ./tecnicofs numthreads nomesocket */
   if (argc != 3)
   {
     fprintf(stderr, "Usage: [numthreads] [nomesocket].\n");
@@ -29,18 +34,34 @@ void validateInitArgs(int argc, char *argv[])
   }
 }
 
+/*
+ * Responsible for parsing, a command with an error.
+ */
 void errorParse()
 {
   fprintf(stderr, "Error: command invalid\n");
   exit(EXIT_FAILURE);
 }
 
+/*
+ * Sends response to the client according to the result of the operation asked by the client.
+ * Input:
+ *  - sockfd: sock file descriptor for the client
+ *  - response_code: response code that should be sent to the client
+ *  - client_addr: client address
+ *  - addrelen: client address length
+ */
 void sendResponse(int sockfd, int response_code, struct sockaddr_un *client_addr, socklen_t addrlen)
 {
   if (sendto(sockfd, &response_code, sizeof(int), 0, (struct sockaddr *)client_addr, addrlen) < 0)
     perror("server: sendto error");
 }
 
+/*
+ * Waits for a any command, that should be sent by a mounted client
+ * Input:
+ *  - arg: socket file descriptor for the server 
+ */
 void *consumerThread(void *arg)
 {
   int sockfd = *(int *)arg;
@@ -54,21 +75,19 @@ void *consumerThread(void *arg)
   socklen_t addrlen;
   int c;
   int searchResult;
-
   FILE *fp;
-
   addrlen = sizeof(struct sockaddr_un);
+
   while (1)
   {
     c = recvfrom(sockfd, command, sizeof(command) - 1, 0, (struct sockaddr *)&client_addr, &addrlen);
     if (c <= 0)
-      continue; 
-    // Isto nao acaba por ser uma espera ativa?
+      continue;
     command[c] = '\0';
     numArgs = sscanf(command, "%c %s %s", &token, arg1, arg2);
     if (numArgs < 2)
     {
-      sendResponse(sockfd, -11, &client_addr, addrlen);
+      sendResponse(sockfd, TECNICOFS_ERROR_OTHER, &client_addr, addrlen);
       continue;
     }
     switch (token)
@@ -108,7 +127,7 @@ void *consumerThread(void *arg)
       break;
     case 'd':
       printf("Delete: %s\n", arg1);
-      sendResponse(sockfd, delete(arg1), &client_addr, addrlen);
+      sendResponse(sockfd, delete (arg1), &client_addr, addrlen);
       break;
     case 'p':
       printf("Print: %s\n", arg1);
@@ -119,18 +138,24 @@ void *consumerThread(void *arg)
         break;
       }
       print_tecnicofs_tree(fp);
-      fclose(fp);
+      fclose(fp); /* If function fails, server must continue */
       sendResponse(sockfd, SUCCESS, &client_addr, addrlen);
       break;
     default:
     {
       fprintf(stderr, "Error: command to apply\n");
-      sendResponse(sockfd, -11, &client_addr, addrlen);
+      sendResponse(sockfd, TECNICOFS_ERROR_OTHER, &client_addr, addrlen);
     }
     }
   }
 }
 
+/*
+ * Creates all the threads.
+ * Input:
+ *  - threads_count_char: number of threads to be created
+ *  - sockfd: socket file descriptor for the server
+ */
 void executeThreads(char *threads_count_char, int sockfd)
 {
   int i, *result;
@@ -150,9 +175,14 @@ void executeThreads(char *threads_count_char, int sockfd)
     if (pthread_join(tid[i], (void **)&result) != 0)
       printf("Error while joining thread.\n");
   }
-
 }
 
+/*
+ * Initializes the socket sockaddr_un struct
+ * Input:
+ *  - path: path for the file associated with the socket
+ *  - addr: socket struct for the server
+ */
 int setSockAddrUn(char *path, struct sockaddr_un *addr)
 {
   if (addr == NULL)
@@ -163,6 +193,13 @@ int setSockAddrUn(char *path, struct sockaddr_un *addr)
   return SUN_LEN(addr);
 }
 
+/*
+ * Mounts the socket for the server
+ * Input:
+ *  - path: path for the file associated with the socket
+ *  - addr: socket struct for the server
+ * Returns: socket file descriptor
+ */
 int socketMount(char *socket_name)
 {
   int sockfd;

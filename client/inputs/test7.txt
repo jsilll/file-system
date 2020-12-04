@@ -3,6 +3,6 @@ c a d
 c /y f
 m a /a/a
 m y /y/y
+p tree.txt
 c a/b f
 m a/b b
-p tree.txt
