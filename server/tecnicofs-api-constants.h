@@ -20,8 +20,8 @@ typedef enum type
     T_NONE
 } type;
 
-#ifndef SUCESS
-#define SUCESS 0
+#ifndef SUCCESS
+#define SUCCESS 0
 #endif
 
 /* Generic error */
