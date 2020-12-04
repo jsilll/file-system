@@ -6,8 +6,6 @@
 #include <sys/un.h>
 #include <unistd.h>
 
-#define SUCCESS 0
-
 int sockfd;
 socklen_t servlen, clilen;
 struct sockaddr_un serv_addr, client_addr;
