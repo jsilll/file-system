@@ -20,6 +20,10 @@ typedef enum type
     T_NONE
 } type;
 
+#ifndef SUCESS
+#define SUCESS 0
+#endif
+
 /* Generic error */
 #define TECNICOFS_ERROR_OTHER -1
 
