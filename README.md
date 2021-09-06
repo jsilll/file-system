@@ -1,5 +1,3 @@
-# SO Project 2020-2021
-
 How to run client:
 
 Execute the following command:
