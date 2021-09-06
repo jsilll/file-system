@@ -1,4 +1,4 @@
-How to run client:
+### How to run client:
 
 Execute the following command:
 
@@ -7,7 +7,7 @@ Execute the following command:
 ```
 
 
-How to run server:
+### How to run server:
 
 Execute the following command:
 
